@@ -439,7 +439,7 @@ function PhonePortCard({ api, status, reload, sites }: PhoneSectionProps) {
         ))}
       </Stack>
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Move a number to Aglyn</DialogTitle>
+        <DialogTitle>Move a number you already have</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <DialogContentText variant="body2">

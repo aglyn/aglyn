@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { PHONE_MAX_BODY_CHARS, PHONE_MINUTES_COUNTER, PHONE_TEXTS_COUNTER } from '../constants/usage'
 import { PHONE_API_ROUTES } from '../constants/api-routes'
 import {
@@ -138,10 +139,10 @@ export function createPhoneService(deps: PhoneServiceDeps) {
     const existing = await repo.getAccount(orgId)
     if (existing) return existing
     requireTwilio()
-    const created = await twilioCall(() => twilio.createSubaccount(`Aglyn ${orgName || orgId}`.slice(0, 64)))
+    const created = await twilioCall(() => twilio.createSubaccount(`${PLATFORM_BRAND_NAME} ${orgName || orgId}`.slice(0, 64)))
     const account = {
       subaccountSid: created.sid,
-      friendlyName: `Aglyn ${orgName || orgId}`.slice(0, 64),
+      friendlyName: `${PLATFORM_BRAND_NAME} ${orgName || orgId}`.slice(0, 64),
       createdAtMs: deps.now(),
       createdByUid: uid,
     }
@@ -248,7 +249,7 @@ export function createPhoneService(deps: PhoneServiceDeps) {
       const bought = await twilioCall(() =>
         twilio.purchaseNumber(account.subaccountSid, {
           e164,
-          friendlyName: input.label || orgName || 'Aglyn',
+          friendlyName: input.label || orgName || PLATFORM_BRAND_NAME,
           webhooks: phoneWebhooks(origin()),
         }),
       )
