@@ -126,6 +126,54 @@ depend on it: both apps link the plugin manifest, so that would put the SDK
 (and its location and Bluetooth references) in the Aglyn app, which declares no
 purpose strings for them.
 
+### A physical iPhone (Tap to Pay on iPhone in a development build)
+
+Only the Debug configuration of Aglyn POS (`com.aglyn.pos.debug`) carries Apple's
+Tap to Pay entitlement, and only a registered iPhone can run it. In Stripe test
+mode the Simulator uses the SDK's simulated reader; a physical iPhone uses its
+real reader, so Apple's own screens (its terms, the tap screen) appear. Pass
+`-AglynSimulatedReader YES` to use the simulated reader on a phone anyway. In
+test mode Stripe declines a real card or wallet; only Stripe's physical test
+cards approve.
+
+The phone reaches the Mac's local stack over Wi-Fi. A DEBUG build (never a
+Release build: the allowance is compiled out) takes a private-network console
+and emulator host as a local stack: the Mac's Bonjour name (`<name>.local`) or a
+10.x, 172.16–31.x or 192.168.x address. Production stays https only, and a
+debug build is never signed in to production.
+
+1. `Config/Local.xcconfig`, with the Mac's name (`scutil --get LocalHostName`):
+
+   ```
+   AGLYN_CONSOLE_URL = http:/$()/<name>.local:4610
+   AGLYN_AUTH_EMULATOR_HOST = <name>.local:26099
+   AGLYN_FIRESTORE_EMULATOR_HOST = <name>.local:26082
+   AGLYN_FIREBASE_PROJECT_ID = demo-aglyn-catchup
+   ```
+
+2. The local stack must answer on the Wi-Fi address, not only on 127.0.0.1: the
+   console's dev server listens on every address (`next dev` does by default);
+   the emulators need `"host": "0.0.0.0"` in the firebase config, or a TCP relay
+   from the Wi-Fi address to 127.0.0.1 for each port. Allow incoming
+   connections in the macOS firewall if it asks.
+3. Build and install on the phone (it must be connected, unlocked and trusted,
+   with Developer Mode on):
+
+   ```bash
+   xcrun devicectl list devices                    # the phone's identifier
+   cd apps/ios
+   xcodebuild build -project Aglyn.xcodeproj -scheme AglynPOS -configuration Debug \
+     -destination 'platform=iOS,id=<identifier>' -allowProvisioningUpdates \
+     -derivedDataPath build/DerivedDataDevice
+   xcrun devicectl device install app --device <identifier> \
+     build/DerivedDataDevice/Build/Products/Debug-iphoneos/'Aglyn POS.app'
+   xcrun devicectl device process launch --device <identifier> com.aglyn.pos.debug
+   ```
+
+4. The phone needs iOS 18 or later, the same Wi-Fi as the Mac, a passcode,
+   location allowed for Aglyn POS Debug (card networks require it), Local
+   Network allowed when asked, and an Apple Account signed in (Apple's terms).
+
 ## Test
 
 ```bash
