@@ -18,11 +18,13 @@
 import {
   convertMinor,
   crossRate,
+  currencyRate,
   CURRENCY_NAMES,
   currencyMinorFactor,
   formatShopperMoney,
   SELLABLE_CURRENCIES,
   storeCurrencies,
+  type CurrencyRounding,
   type FxRates,
   type StoreCurrency,
   type StoreCurrencySettings,
@@ -63,16 +65,49 @@ export function currencyOptionLabel(code: string): string {
   return name ? `${code} · ${name}` : code
 }
 
-/** A currency as the console adds it: rounded to a whole number, no buffer. */
+/**
+ * A currency as the console adds it, the way Shopify Markets does: the daily
+ * rate, no rounding until the merchant turns it on, no price adjustment.
+ */
 export function newStoreCurrency(code: string): StoreCurrency {
-  return { code, rounding: 'whole', bufferPct: 0 }
+  return { code, rounding: 'none', bufferPct: 0 }
 }
 
-/** A buffer as typed, kept within 0–10 percent; blank is none. */
-export function clampBufferInput(raw: string): number {
-  const value = Number(String(raw).replace(',', '.'))
-  if (!Number.isFinite(value) || value <= 0) return 0
-  return Math.min(10, Math.round(value * 100) / 100)
+/** The endings a merchant may round converted prices to, once rounding is on. */
+export const CURRENCY_ROUNDING_ENDINGS: readonly Exclude<CurrencyRounding, 'none'>[] = ['99', '95', 'whole']
+
+/** A price adjustment as typed, kept within -90 to +100 percent; blank is none. */
+export function clampAdjustmentInput(raw: string): number {
+  const value = Number(String(raw).trim().replace(',', '.'))
+  if (!Number.isFinite(value) || value === 0) return 0
+  return Math.max(-90, Math.min(100, Math.round(value * 100) / 100))
+}
+
+/** A manual exchange rate as typed: blank (or not a positive number) is the daily rate. */
+export function parseManualRateInput(raw: string): number | undefined {
+  const value = Number(String(raw ?? '').trim().replace(',', '.'))
+  return Number.isFinite(value) && value > 0 ? value : undefined
+}
+
+/**
+ * What rate a currency converts at, said on its card: "Daily rate 1.7041,
+ * updated Nov 25", "Manual rate 1.7500", or that no daily rate is in yet.
+ */
+export function currencyRateLabel(
+  rates: FxRates | undefined | null,
+  base: string,
+  entry: StoreCurrency,
+): string {
+  if (entry.manualRate && entry.manualRate > 0) return `Manual rate ${entry.manualRate.toFixed(4)}`
+  const daily = crossRate(rates ?? undefined, base, entry.code)
+  if (daily == null) return `No daily rate for ${entry.code} yet`
+  const asOf = ratesAsOfLabel(rates)
+  return `Daily rate ${daily.toFixed(4)}${asOf ? `, updated ${asOf}` : ''}`
+}
+
+/** The daily rate alone, for a manual-rate field's helper text. */
+export function dailyRateLabel(rates: FxRates | undefined | null, base: string, code: string): string {
+  return currencyRateLabel(rates, base, { code })
 }
 
 /**
@@ -126,8 +161,9 @@ export function ratesAsOfLabel(rates: FxRates | undefined | null): string {
 
 /**
  * The line under each currency on the Currencies card:
- * "$250.00 → NZ$449.00 (rate 1.7041, as of Nov 25)". The rate shown is the
- * reference rate itself; the buffer and rounding are what move the price.
+ * "$250.00 → NZ$426.03 (rate 1.7041, as of Nov 25)", or "(manual rate
+ * 1.7500)". The rate shown is the one in use; the price adjustment and
+ * rounding are what move the price from it.
  */
 export function currencyPreviewText(
   sampleMinor: number,
@@ -136,12 +172,15 @@ export function currencyPreviewText(
   rates: FxRates | undefined | null,
 ): string {
   const from = formatShopperMoney(sampleMinor, base)
-  const rate = crossRate(rates ?? undefined, base, entry.code)
+  const rate = currencyRate(rates ?? undefined, base, entry)
   const converted = rate == null ? undefined : convertMinor(sampleMinor, base, entry, rates ?? undefined)
   if (rate == null || converted == null) {
     return `${from} → no rate for ${entry.code} yet; shoppers pay in ${base} until there is one`
   }
   const to = formatShopperMoney(converted, entry.code, { disambiguate: true })
+  if (entry.manualRate && entry.manualRate > 0) {
+    return `${from} → ${to} (manual rate ${rate.toFixed(4)})`
+  }
   const asOf = ratesAsOfLabel(rates)
   return `${from} → ${to} (rate ${rate.toFixed(4)}${asOf ? `, as of ${asOf}` : ''})`
 }

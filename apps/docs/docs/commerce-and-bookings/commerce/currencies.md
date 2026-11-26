@@ -19,16 +19,18 @@ beside **Store settings**.
 1. On the **Currencies** card, turn on **Sell in other currencies**.
 2. Under **Add a currency**, pick each currency you want to sell in, such as
    New Zealand dollar, British pound, Euro or Australian dollar.
-3. For each one, choose its **Rounding** and **Buffer %** (both explained
-   below), and whether its **prices include tax**.
+3. For each one, optionally set a **Manual exchange rate**, a **Price
+   adjustment (%)** and **Round converted prices** (all explained below), and
+   choose whether its **prices include tax**.
 4. Leave **Show each shopper prices in their own currency, picked from where
    they are browsing** on, unless you want every shopper to start in your
    store currency.
 5. Select **Save currencies**.
 
-Under each currency the card shows what one price becomes, for example
-"$250.00 → NZ$449.00 (rate 1.7041, as of Nov 25)", so you can check the
-rounding and buffer before you save.
+The card says when the rates were last updated, and under each currency the
+rate it converts at and what one price becomes, for example
+"$250.00 → NZ$426.03 (rate 1.7041, as of Nov 25)", so you can check the
+result before you save.
 
 To stop selling in a currency, select **✕** beside it and save. Turning off
 **Sell in other currencies** keeps your list, so you can turn it back on later.
@@ -47,42 +49,48 @@ device.
 Where two currencies share a sign, prices say which is which: US$29.00,
 A$45.00, NZ$49.00.
 
-## Daily rates {#daily-rates}
+## Exchange rates {#exchange-rates}
 
 Prices convert from your store currency at the European Central Bank's
 reference rates, which are published every working day and picked up the same
-day. The card shows the rate each preview uses and the day it is from.
+day. The card shows the rate each currency uses and the day it is from.
 
-If the rates ever go more than a few days without an update, shoppers are
+If the daily rates ever go more than a few days without an update, shoppers are
 shown and charged your store currency until fresh rates arrive, so nobody pays
 at an old rate.
 
+To fix the rate yourself, enter a **Manual exchange rate**: how much of that
+currency one unit of your store currency buys (1.70 means $1 = NZ$1.70). A
+manual rate replaces the daily one and does not change until you change it.
+Leave the field blank to go back to the daily rate.
+
 ## Rounding {#rounding}
 
-A converted price is rarely a tidy number. **Rounding** tidies it, always
-upward, so you never earn less than the rate gives:
+Converted prices are charged to the cent unless you turn on **Round converted
+prices** for a currency. Then choose the ending, and every converted price
+rounds up to it, so you never earn less than the rate gives:
 
-| Rounding | NZ$43.27 becomes |
+| Round up to | NZ$43.27 becomes |
 | -- | -- |
-| To the cent (no rounding) | NZ$43.27 |
-| Whole number | NZ$44.00 |
 | Ends in .99 | NZ$43.99 |
 | Ends in .95 | NZ$43.95 |
+| Whole number | NZ$44.00 |
 
 Rounding applies to product prices. Add-ons and shipping convert to the cent,
 so a small add-on is not rounded up to a whole extra dollar.
 
-## Buffer {#buffer}
+## Price adjustment {#price-adjustment}
 
-**Buffer %** (0 to 10) is added to the rate before rounding. Use it to cover
-Stripe's conversion fee, or the change in rates between the day a shopper pays
-and the day the money reaches you. Leave it at 0 to charge the rate exactly.
+**Price adjustment (%)**, from -90 to +100, raises or lowers every converted
+price in that currency before rounding. Stripe's currency conversion fee
+(about 1–2%) comes out of your payout, so a small rise here, such as 2%, is how
+shoppers in that currency cover it. Leave it at 0 to charge the rate exactly.
 
 ## Fixed prices {#fixed-prices}
 
 Where a converted price is not the one you want, set the price yourself. A
-fixed price is charged exactly as you enter it, with no conversion, buffer or
-rounding. Leave a field blank to keep converting it; the blank field shows the
+fixed price is charged exactly as you enter it, with no conversion,
+adjustment or rounding. Leave a field blank to keep converting it; the blank field shows the
 converted price in grey.
 
 - **Products**: in the product editor, under **Prices in other currencies**,
@@ -112,7 +120,8 @@ Stripe Tax registration in each country that pays in that currency. See
   Stripe account. Every price, add-on, shipping rate, discount and fee on the
   order is in that currency.
 - Stripe converts the payment and pays it out to you in your store currency.
-  Stripe charges a conversion fee for this, taken from the payment.
+  Stripe charges a conversion fee for this (about 1–2%), taken from the
+  payment: raise prices with a price adjustment to cover it.
 - Each order shows what the shopper paid in their currency, and the same
   amounts in your store currency.
 - A refund goes back in the currency the shopper paid, for the amount they

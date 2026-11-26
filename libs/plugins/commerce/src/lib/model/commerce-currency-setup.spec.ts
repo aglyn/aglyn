@@ -18,7 +18,10 @@
 import type { FxRates } from './commerce-currency'
 import {
   addableCurrencies,
-  clampBufferInput,
+  clampAdjustmentInput,
+  currencyRateLabel,
+  newStoreCurrency,
+  parseManualRateInput,
   currencyPreviewText,
   minorToInput,
   otherStoreCurrencies,
@@ -52,14 +55,26 @@ describe('currency setup helpers (AGL-4248)', () => {
     expect(parseMajorInput(' 44,90 ')).toBe(44.9)
     expect(parseMajorInput('abc')).toBeNull()
     expect(parseMajorInput('-1')).toBeNull()
-    expect(clampBufferInput('12')).toBe(10)
-    expect(clampBufferInput('')).toBe(0)
+    expect(clampAdjustmentInput('150')).toBe(100)
+    expect(clampAdjustmentInput('-95')).toBe(-90)
+    expect(clampAdjustmentInput('-5')).toBe(-5)
+    expect(clampAdjustmentInput('')).toBe(0)
+    expect(parseManualRateInput('1,75')).toBe(1.75)
+    expect(parseManualRateInput('')).toBeUndefined()
+    expect(parseManualRateInput('0')).toBeUndefined()
   })
 
   it('sets and clears one currency, dropping an emptied map', () => {
     expect(withCurrencyAmount(undefined, 'NZD', 449)).toEqual({ NZD: 449 })
     expect(withCurrencyAmount({ NZD: 449, GBP: 199 }, 'NZD', undefined)).toEqual({ GBP: 199 })
     expect(withCurrencyAmount({ NZD: 449 }, 'NZD', undefined)).toBeUndefined()
+  })
+
+  it('adds a currency unrounded, as Shopify does, and says which rate it uses', () => {
+    expect(newStoreCurrency('NZD')).toEqual({ code: 'NZD', rounding: 'none', bufferPct: 0 })
+    expect(currencyRateLabel(rates, 'USD', { code: 'NZD' })).toBe('Daily rate 1.7041, updated Nov 25')
+    expect(currencyRateLabel(rates, 'USD', { code: 'NZD', manualRate: 1.75 })).toBe('Manual rate 1.7500')
+    expect(currencyRateLabel(rates, 'USD', { code: 'GBP' })).toBe('No daily rate for GBP yet')
   })
 
   it('shows minor amounts as typed, yen without decimals', () => {
@@ -71,6 +86,9 @@ describe('currency setup helpers (AGL-4248)', () => {
   it('previews a price at the day’s rate, or says there is no rate', () => {
     expect(currencyPreviewText(25_000, 'USD', { code: 'NZD', rounding: 'whole' }, rates)).toBe(
       '$250.00 → NZ$427.00 (rate 1.7041, as of Nov 25)',
+    )
+    expect(currencyPreviewText(25_000, 'USD', { code: 'NZD', manualRate: 2 }, rates)).toBe(
+      '$250.00 → NZ$500.00 (manual rate 2.0000)',
     )
     expect(currencyPreviewText(25_000, 'USD', { code: 'GBP', rounding: 'whole' }, rates)).toMatch(
       /no rate for GBP yet/,

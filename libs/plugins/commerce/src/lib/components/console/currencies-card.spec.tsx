@@ -105,17 +105,24 @@ describe('CurrenciesCard (AGL-4248)', () => {
     )
     expect(screen.getByText('NZD · New Zealand dollar')).toBeTruthy()
 
-    // Whole-number rounding by default: 250 × 1.7041 = 426.03, up to 427.
+    // As on Shopify: the daily rate, no rounding until it is turned on.
+    // 250 × 1.7041 = 426.025, up to the cent.
     await waitFor(() =>
       expect(screen.getByTestId('currency-preview-NZD').textContent).toBe(
-        '$250.00 → NZ$427.00 (rate 1.7041, as of Nov 25)',
+        '$250.00 → NZ$426.03 (rate 1.7041, as of Nov 25)',
       ),
     )
-    pick('Rounding (NZD)', 'Ends in .95 (28.95)')
+    expect(screen.getByTestId('currency-rates-updated').textContent).toMatch(/^Rates updated Nov 25/)
+    expect(screen.getByTestId('currency-rate-NZD').textContent).toBe('Daily rate 1.7041, updated Nov 25')
+    expect(screen.queryByRole('combobox', { name: 'Round up to (NZD)' })).toBeNull()
+    fireEvent.click(screen.getByRole('switch', { name: 'Round converted prices (NZD)' }))
+    pick('Round up to (NZD)', 'Ends in .95 (28.95)')
     expect(screen.getByTestId('currency-preview-NZD').textContent).toBe(
       '$250.00 → NZ$426.95 (rate 1.7041, as of Nov 25)',
     )
-    fireEvent.blur(screen.getByRole('textbox', { name: 'Buffer % (NZD)' }), { target: { value: '25' } })
+    fireEvent.blur(screen.getByRole('textbox', { name: 'Price adjustment (%) (NZD)' }), {
+      target: { value: '150' },
+    })
 
     fireEvent.click(saveButton())
     await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
@@ -124,11 +131,30 @@ describe('CurrenciesCard (AGL-4248)', () => {
     expect(payload).toEqual({
       currencies: {
         enabled: true,
-        // A buffer past 10% is held to 10.
-        currencies: [{ code: 'NZD', rounding: '95', bufferPct: 10, pricesIncludeTax: false }],
+        // An adjustment past +100% is held to 100.
+        currencies: [{ code: 'NZD', rounding: '95', bufferPct: 100, pricesIncludeTax: false }],
         autoDetect: true,
       },
     })
+  })
+
+  it('converts at a manual rate when one is set, and drops it when cleared', async () => {
+    storeDoc = { currency: 'USD', currencies: { enabled: true, currencies: [{ code: 'NZD', rounding: 'none' }] } }
+    render(<CurrenciesCard hostId="host-1" />)
+    const manual = screen.getByRole('textbox', { name: 'Manual exchange rate (NZD)' })
+    fireEvent.blur(manual, { target: { value: '2' } })
+    expect(screen.getByTestId('currency-preview-NZD').textContent).toBe(
+      '$250.00 → NZ$500.00 (manual rate 2.0000)',
+    )
+    expect(screen.getByTestId('currency-rate-NZD').textContent).toBe('Manual rate 2.0000')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+    expect((setDoc as jest.Mock).mock.calls[0][1].currencies.currencies[0].manualRate).toBe(2)
+
+    fireEvent.blur(manual, { target: { value: '' } })
+    await waitFor(() =>
+      expect(screen.getByTestId('currency-rate-NZD').textContent).toBe('Daily rate 1.7041, updated Nov 25'),
+    )
   })
 
   it('keeps what is stored, and saves auto-detect off and tax-inclusive prices', async () => {

@@ -57,13 +57,11 @@ export interface CurrenciesCardProps {
 /** The price each currency's preview converts: 250 of the store currency. */
 const SAMPLE_MAJOR = 250
 
-const ROUNDINGS = Object.entries(CommerceModel.CURRENCY_ROUNDING_LABELS) as Array<
-  [CommerceModel.CurrencyRounding, string]
->
 
 /**
  * Currencies (AGL-4248), beside Store settings: which other currencies the
- * store sells in, how each converted price is rounded and buffered, whether
+ * store sells in, the rate each converts at (daily, or a manual one), its
+ * price adjustment and rounding (off until turned on, as on Shopify), whether
  * its prices include tax, and whether shoppers get their own currency from
  * where they browse. Stored on `hosts/{hostId}/settings/store` under
  * `currencies`; the storefront and checkout read it through
@@ -109,6 +107,9 @@ export function CurrenciesCard(props: CurrenciesCardProps) {
     else next[index] = { ...next[index], ...patch }
     form.edit({ currencies: next })
   }
+  // A whole entry, for a field whose clearing removes a key.
+  const replaceEntry = (index: number, entry: CommerceModel.StoreCurrency) =>
+    form.edit({ currencies: list.map((was, at) => (at === index ? entry : was)) })
   const addCurrency = (code: string) => {
     if (!code) return
     form.edit({ currencies: [...list, CommerceModel.newStoreCurrency(code)] })
@@ -143,8 +144,10 @@ export function CurrenciesCard(props: CurrenciesCardProps) {
                   enabled: current.enabled === true,
                   currencies: (current.currencies ?? []).map((entry) => ({
                     code: entry.code,
-                    rounding: entry.rounding ?? 'whole',
-                    bufferPct: CommerceModel.clampBufferInput(String(entry.bufferPct ?? 0)),
+                    rounding: entry.rounding ?? 'none',
+                    bufferPct: CommerceModel.clampAdjustmentInput(String(entry.bufferPct ?? 0)),
+                    // Blank is the daily rate: the key is left off, never null.
+                    ...(entry.manualRate && entry.manualRate > 0 ? { manualRate: entry.manualRate } : {}),
                     pricesIncludeTax: entry.pricesIncludeTax === true,
                   })),
                   autoDetect: current.autoDetect !== false,
@@ -193,6 +196,11 @@ export function CurrenciesCard(props: CurrenciesCardProps) {
         </Typography>
         {current.enabled ? (
           <>
+            <Typography variant="body2" color="text.secondary" data-testid="currency-rates-updated">
+              {rates?.asOfMs
+                ? `Rates updated ${CommerceModel.ratesAsOfLabel(rates)} (European Central Bank, daily)`
+                : 'Daily rates are not in yet: a currency without a manual rate sells in ' + base + ' until they are.'}
+            </Typography>
             {list.map((entry, index) => (
               <Box key={entry.code}>
                 <Divider sx={{ mb: 1.5 }} />
@@ -209,37 +217,80 @@ export function CurrenciesCard(props: CurrenciesCardProps) {
                       {'✕'}
                     </IconButton>
                   </Stack>
+                  <Typography variant="body2" color="text.secondary" data-testid={`currency-rate-${entry.code}`}>
+                    {CommerceModel.currencyRateLabel(rates, base, entry)}
+                  </Typography>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
                     <TextField
-                      label={`Rounding (${entry.code})`}
-                      value={entry.rounding ?? 'whole'}
-                      onChange={(event) =>
-                        setEntry(index, { rounding: event.target.value as CommerceModel.CurrencyRounding })
-                      }
+                      label={`Manual exchange rate (${entry.code})`}
+                      // Kept as typed until the field is left (as below).
+                      defaultValue={entry.manualRate ? String(entry.manualRate) : ''}
+                      placeholder="Daily rate"
+                      onBlur={(event) => {
+                        const manualRate = CommerceModel.parseManualRateInput(event.target.value)
+                        const next = { ...entry }
+                        if (manualRate) next.manualRate = manualRate
+                        else delete next.manualRate
+                        replaceEntry(index, next)
+                      }}
                       size="small"
-                      select
                       sx={{ minWidth: 220 }}
-                    >
-                      {ROUNDINGS.map(([value, label]) => (
-                        <MenuItem key={value} value={value}>
-                          {label}
-                        </MenuItem>
-                      ))}
-                    </TextField>
+                      helperText={`${base} 1 = ${entry.code} this much. Blank uses the ${CommerceModel.dailyRateLabel(
+                        rates,
+                        base,
+                        entry.code,
+                      ).replace(/^Daily rate/, 'daily rate')}`}
+                      slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+                    />
                     <TextField
-                      label={`Buffer % (${entry.code})`}
+                      label={`Price adjustment (%) (${entry.code})`}
                       // Kept as typed until the field is left, so "2.5" can
                       // be typed through "2." without the dot being eaten.
                       defaultValue={entry.bufferPct ? String(entry.bufferPct) : ''}
                       placeholder="0"
                       onBlur={(event) =>
-                        setEntry(index, { bufferPct: CommerceModel.clampBufferInput(event.target.value) })
+                        setEntry(index, { bufferPct: CommerceModel.clampAdjustmentInput(event.target.value) })
                       }
                       size="small"
-                      sx={{ width: 140 }}
-                      helperText="0–10, added to the rate"
+                      sx={{ minWidth: 220 }}
+                      helperText={
+                        '-90 to +100. Stripe’s currency conversion fee (about 1–2%) comes out of your ' +
+                        'payout unless you raise prices here.'
+                      }
                       slotProps={{ htmlInput: { inputMode: 'decimal' } }}
                     />
+                  </Stack>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          size="small"
+                          checked={(entry.rounding ?? 'none') !== 'none'}
+                          onChange={(event) =>
+                            setEntry(index, { rounding: event.target.checked ? '99' : 'none' })
+                          }
+                        />
+                      }
+                      label={`Round converted prices (${entry.code})`}
+                    />
+                    {(entry.rounding ?? 'none') !== 'none' ? (
+                      <TextField
+                        label={`Round up to (${entry.code})`}
+                        value={entry.rounding}
+                        onChange={(event) =>
+                          setEntry(index, { rounding: event.target.value as CommerceModel.CurrencyRounding })
+                        }
+                        size="small"
+                        select
+                        sx={{ minWidth: 220 }}
+                      >
+                        {CommerceModel.CURRENCY_ROUNDING_ENDINGS.map((value) => (
+                          <MenuItem key={value} value={value}>
+                            {CommerceModel.CURRENCY_ROUNDING_LABELS[value]}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    ) : null}
                   </Stack>
                   <FormControlLabel
                     control={
