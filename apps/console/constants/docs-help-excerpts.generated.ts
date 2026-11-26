@@ -236,7 +236,7 @@ export const DOCS_HELP_EXCERPTS = {
   siteBackupAndPackages: 'Download a site or the items you pick as one package, import one into any of your sites, compare each item with the site\'s copy and choose how to handle it before anything is written, and undo an import.',
   siteLooks: 'How a site started with AI gets its look: the style you choose sets the range of themes, colors, fonts and buttons, and every site gets its own readable variation, saved as a theme you can edit.',
   siteProtection: 'Password-protect pages, design custom error pages, and put your site in maintenance mode.',
-  siteSearch: 'Let visitors search your site\'s pages, blog entries, and dataset records with a built-in search page.',
+  siteSearch: 'Let visitors search your site\'s pages, blog entries, products and dataset records with a built-in search page.',
   siteStarters: 'Create a new site from a ready-made website, one of Aglyn\'s styles or a starter from the marketplace, chosen in Create site before the site exists. Rolling out.',
   sso: 'How to set up SAML SSO yourself, how domain verification works, what enforcement does, and the consequences of SSO accounts living in their own identity pool.',
   staffConsole: 'Aglyn-staff tools for managing organizations, entitlements, users, and audits.',

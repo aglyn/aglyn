@@ -45,6 +45,9 @@ const NEEDLE = 'zeppelin'
 // Factories, not bare `jest.mock`: the module graph under
 // `@aglyn/tenant-data-admin` reaches `undici`, and an auto-mock still
 // evaluates the real graph to derive its shape.
+// The section index is its own reader with its own spec (site-section-index.spec.ts);
+// here it answers nothing, so these cases count only what they set up.
+jest.mock('./site-section-index', () => ({ retrieveSiteSections: jest.fn(async () => []) }))
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: { app: jest.fn() },
@@ -58,7 +61,7 @@ jest.mock('@aglyn/tenant-data-admin/render-cache', () => ({
   withRenderCache: async (options: { read: () => Promise<unknown> }) =>
     options.read(),
 }))
-jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
+jest.mock('./template-screens', () => ({
   __esModule: true,
   __esModuleDefault: true,
   default: jest.fn(async () => new Set<string>()),
@@ -73,7 +76,7 @@ jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
 }))
 // The render's cached version read. The double hands back whatever the seed
 // stored — bytes included — and counts the reads.
-jest.mock('@aglyn/tenant-runtime/get-screen-version', () => ({
+jest.mock('./get-screen-version', () => ({
   __esModule: true,
   default: jest.fn(),
 }))
@@ -87,39 +90,39 @@ jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   ...jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/collection-entry-date',
+    '@aglyn/aglyn/app-utils/collection-entry-date',
   ),
   screenRoutePathToUrl: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/screen-route',
+    '@aglyn/aglyn/app-utils/screen-route',
   ).screenRoutePathToUrl,
   hostCollectionKind: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/collection-kind',
+    '@aglyn/aglyn/app-utils/collection-kind',
   ).hostCollectionKind,
   decodeStoredNodes: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/stored-nodes',
+    '@aglyn/aglyn/app-utils/stored-nodes',
   ).decodeStoredNodes,
   repeatKeys: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/expand-repeatables',
+    '@aglyn/aglyn/app-utils/expand-repeatables',
   ).repeatKeys,
   // The entry branch reaches for both of these (AGL-1525). This suite seeds
   // no content collections, so it never calls them — but an unfaithful
   // double is how a suite starts passing for the wrong reason, and
   // `{...undefined}` is a Fuse that matches EVERYTHING rather than a crash.
   COLLECTION_SEARCH_FUSE_OPTIONS: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/collection-entries',
+    '@aglyn/aglyn/app-utils/collection-entries',
   ).COLLECTION_SEARCH_FUSE_OPTIONS,
   formatCollectionEntryDate: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/collection-entries',
+    '@aglyn/aglyn/app-utils/collection-entries',
   ).formatCollectionEntryDate,
 }))
 
 import { readRepeatRows } from '@aglyn/aglyn/plugin-manager/repeat-rows'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import getScreenVersion from '@aglyn/tenant-runtime/get-screen-version'
-import searchContent from '../utils/search-content'
+import getScreenVersion from './get-screen-version'
+import searchContent from './site-search'
 
 const { compress } = jest.requireActual(
-  '../../../libs/aglyn/src/lib/app-utils/compress',
+  '@aglyn/aglyn/app-utils/compress',
 )
 
 /** A screen whose one element repeats over `key`, as the besigner authors it. */

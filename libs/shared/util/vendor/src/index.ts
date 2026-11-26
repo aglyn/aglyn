@@ -48,9 +48,9 @@ export * from './lib/change-case'
 //     `import()`s the matcher on the first keystroke (AGL-3401). It used to arrive with every
 //     page that placed any collection element (25.9 KB raw, AGL-3082), and
 //     before the registry split, with every page at all,
-//   - `apps/tenant/utils/search-content.ts` → tenant, but SERVER-only: it
+//   - `libs/tenant/runtime/src/lib/site-search.ts` → tenant, but SERVER-only: it
 //     imports `@aglyn/aglyn/server` and `tenant-data-admin`, and
-//     `search-facets.ts` exists precisely so the `'use client'` results page
+//     `site-search-facets.ts` exists precisely so the `'use client'` results page
 //     never value-imports it. Fuse runs on the server for `/search` and has
 //     never been shipped to that page's browser.
 //
