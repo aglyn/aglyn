@@ -34301,6 +34301,31 @@
             }
           ],
           "result": 900
+        },
+        {
+          "args": [
+            {
+              "currency": "nzd",
+              "baseCurrency": "usd",
+              "fxRate": 1.7,
+              "totals": {
+                "totalCents": 14100
+              },
+              "baseTotals": {
+                "totalCents": 8294
+              },
+              "refundedCents": 3400,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Kit",
+                  "quantity": 1,
+                  "unitAmountCents": 14100
+                }
+              ]
+            }
+          ],
+          "result": 6294
         }
       ]
     },
@@ -34672,6 +34697,56 @@
             }
           ],
           "result": "Refunded in full ($50.00)"
+        },
+        {
+          "args": [
+            {
+              "currency": "nzd",
+              "baseCurrency": "usd",
+              "fxRate": 1.7,
+              "totals": {
+                "totalCents": 14100
+              },
+              "baseTotals": {
+                "totalCents": 8294
+              },
+              "refundedCents": 3400,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Kit",
+                  "quantity": 1,
+                  "unitAmountCents": 14100
+                }
+              ]
+            }
+          ],
+          "result": "Partially refunded (NZ$34.00 of NZ$141.00) — no lines withdrawn — refunded by amount"
+        },
+        {
+          "args": [
+            {
+              "currency": "nzd",
+              "baseCurrency": "usd",
+              "fxRate": 1.7,
+              "totals": {
+                "totalCents": 14100
+              },
+              "baseTotals": {
+                "totalCents": 8294
+              },
+              "refundedCents": 14100,
+              "lineItems": [
+                {
+                  "productId": "p1",
+                  "name": "Kit",
+                  "quantity": 1,
+                  "unitAmountCents": 14100
+                }
+              ]
+            }
+          ],
+          "result": "Refunded in full (NZ$141.00)"
         }
       ]
     },

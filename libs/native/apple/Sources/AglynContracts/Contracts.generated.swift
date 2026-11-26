@@ -445,6 +445,18 @@ public struct BookingWindow: Codable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum BuyerNotificationChannel: String, Codable, CaseIterable, Hashable, Sendable {
+  case email = "email"
+  case sms = "sms"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct CheckInCustomer: Codable, Hashable, Sendable {
   public var contactId: String?
   public var customerKey: String
@@ -1480,25 +1492,13 @@ public struct HostOrder: Codable, Hashable, Sendable {
 
 public struct HostOrderBuyerNotificationsValue: Codable, Hashable, Sendable {
   public var atMs: Double
-  public var channel: HostOrderBuyerNotificationsValueChannel
+  public var channel: BuyerNotificationChannel
   public var state: HostOrderBuyerNotificationsValueState
 
-  public init(atMs: Double, channel: HostOrderBuyerNotificationsValueChannel, state: HostOrderBuyerNotificationsValueState) {
+  public init(atMs: Double, channel: BuyerNotificationChannel, state: HostOrderBuyerNotificationsValueState) {
     self.atMs = atMs
     self.channel = channel
     self.state = state
-  }
-}
-
-/// A newer server value decodes as `.unknown`, so an older app never fails on it.
-public enum HostOrderBuyerNotificationsValueChannel: String, Codable, CaseIterable, Hashable, Sendable {
-  case email = "email"
-  case sms = "sms"
-  case unknown = ""
-
-  public init(from decoder: Decoder) throws {
-    let raw = try decoder.singleValueContainer().decode(String.self)
-    self = Self(rawValue: raw) ?? .unknown
   }
 }
 
