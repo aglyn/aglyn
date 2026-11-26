@@ -173,12 +173,13 @@ class CommerceShippingSpecsTest : SpecTestBase() {
   @Test
   fun aStoreThatTurnsDestinationsAwayIsToldInTheConsolesWordsAndOfferedARestOfWorldZone() {
     val writer = RecordingWriter()
-    val model = covered("""{"zones":[{"id":"z1","name":"US","countries":["US"]}],"rates":[{"id":"r1","zoneId":"z1","name":"Standard","kind":"flat","amountCents":500}]}""", writer)
+    // Checkout collects the countries the zones name (AGL-4248), so the gap is a zone nothing is priced on.
+    val model = covered("""{"zones":[{"id":"z1","name":"US","countries":["US"]},{"id":"z2","name":"NZ","countries":["NZ"]}],"rates":[{"id":"r1","zoneId":"z1","name":"Standard","kind":"flat","amountCents":500}]}""", writer)
     val shown = model.shown()
     assertTrue("coverageGap" in shown && "coverageFix" in shown && "coverageAsks" in shown && "coverageOk" !in shown, shown.toString())
-    assertEquals("Checkout turns away 5 of the 6 destinations it collects addresses for", ScreenValues.render(model.block("coverageGap").title!!, model.context))
+    assertEquals("Checkout turns away 1 of the 2 destinations it collects addresses for", ScreenValues.render(model.block("coverageGap").title!!, model.context))
     assertEquals(
-      "No rate reaches Canada, United Kingdom, Australia, Germany, France, so an order shipping there is refused rather than posted for free. Give them a zone with a rate, or add a rest-of-world zone and price one on it.",
+      "No rate reaches New Zealand, so an order shipping there is refused rather than posted for free. Give them a zone with a rate, or add a rest-of-world zone and price one on it.",
       ScreenValues.render(model.block("coverageGap").string("text")!!, model.context),
     )
     assertEquals(
@@ -197,7 +198,7 @@ class CommerceShippingSpecsTest : SpecTestBase() {
     assertTrue("coverageOk" in shown && "coverageGap" !in shown && "coverageFix" !in shown && "coverageAsks" !in shown, shown.toString())
     assertEquals("Coverage", ScreenValues.render(model.block("coverageOk").title!!, model.context))
     assertEquals(
-      "Checkout can price shipping to every destination it collects an address for: United States, Canada, United Kingdom, Australia, Germany, France.",
+      "Checkout can price shipping to every country it can collect an address for.",
       ScreenValues.render(model.block("coverageOk").string("text")!!, model.context),
     )
   }
