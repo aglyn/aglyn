@@ -291,3 +291,41 @@ describe('Social Links keeps its profile fields off the row (AGL-3075)', () => {
     expect(row.getAttribute('data-aglyn')).toBe('leaf:social')
   })
 })
+
+/**
+ * TikTok is one of the element's networks: a site whose Setup → Business
+ * profile lists a TikTok binds `{{host.tiktokUrl}}` to this field, and the
+ * row draws it as an icon beside the others instead of leaving it out.
+ */
+describe('Social Links draws a TikTok profile', () => {
+  it('offers TikTok as a field in Attributes', () => {
+    const field = (socialLinksSchema.attributes ?? []).find(
+      (attribute) => attribute.name === 'tiktok',
+    )
+    expect(field?.label).toBe('TikTok')
+  })
+
+  it('links the profile as a labeled icon, in its place among the others', () => {
+    const { getByLabelText, container } = render(
+      <SocialLinks
+        instagram="https://instagram.com/examplepark"
+        tiktok=" https://www.tiktok.com/@examplepark "
+      />,
+    )
+    const link = getByLabelText('TikTok')
+    expect(link.getAttribute('href')).toBe('https://www.tiktok.com/@examplepark')
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.querySelector('svg path')?.getAttribute('d')).toMatch(/^M12\.525/)
+    const labels = Array.from(container.querySelectorAll('a')).map((anchor) =>
+      anchor.getAttribute('aria-label'),
+    )
+    expect(labels).toEqual(['Instagram', 'TikTok'])
+  })
+
+  it('refuses a TikTok address that is not https', () => {
+    const { queryByLabelText } = render(
+      <SocialLinks tiktok="javascript:alert(1)" />,
+    )
+    expect(queryByLabelText('TikTok')).toBeNull()
+  })
+})

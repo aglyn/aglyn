@@ -5374,6 +5374,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
           type: 'string',
           maxLength: 200,
         },
+        tiktok: {
+          type: 'string',
+          maxLength: 200,
+        },
         github: {
           type: 'string',
           maxLength: 200,
@@ -5388,6 +5392,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       facebook: 'text',
       linkedin: 'text',
       youtube: 'text',
+      tiktok: 'text',
       github: 'text',
     },
     propFields: {
@@ -5396,6 +5401,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       facebook: 'text-field',
       linkedin: 'text-field',
       youtube: 'text-field',
+      tiktok: 'text-field',
       github: 'text-field',
     },
     textLimits: {
@@ -5404,6 +5410,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       facebook: 200,
       linkedin: 200,
       youtube: 200,
+      tiktok: 200,
       github: 200,
     },
     presets: ['Social Links'],

@@ -347,10 +347,11 @@ describe('aglyn.com’s footer, as its home page builds it (AGL-4108)', () => {
   it('keeps its profiles, its words, its address, phone and email, and its © line word for word', () => {
     const { footer, within } = drawnFrame()
     const social = within(footer).find((node) => node.componentId === 'socialLinks')
-    expect(Object.keys(social?.props ?? {}).sort()).toEqual(['facebook', 'github', 'instagram', 'linkedin', 'twitter', 'youtube'])
-    // TikTok, which the Social Links element has no icon for, is linked by its name beside them.
+    expect(Object.keys(social?.props ?? {}).sort()).toEqual(['facebook', 'github', 'instagram', 'linkedin', 'tiktok', 'twitter', 'youtube'])
+    // TikTok is one of the element's icons now, so it is not also linked by its name beside them.
+    expect(social?.props?.['tiktok']).toMatch(/^https:\/\/(?:www\.)?tiktok\.com\//)
     const named = within(footer).filter((node) => node.componentId === 'muiScreenLink' && /tiktok\.com/.test(String(node.props?.['href'])))
-    expect(named).toHaveLength(1)
+    expect(named).toHaveLength(0)
     const words = within(footer).map(label)
     expect(words).toContain('© 2026 Aglyn LLC. All rights reserved. Aglyn™ and Besigner™ are trademarks of Aglyn LLC.')
     expect(words).toContain('The visual builder with a real platform underneath. Design, ship, and run every site from one place.')

@@ -913,6 +913,7 @@ const SOCIAL_FIELDS: Readonly<Record<string, string>> = {
   facebook: 'facebook',
   linkedin: 'linkedin',
   youtube: 'youtube',
+  tiktok: 'tiktok',
   github: 'github',
 }
 

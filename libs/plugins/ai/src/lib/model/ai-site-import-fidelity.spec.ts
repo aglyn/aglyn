@@ -693,8 +693,8 @@ describe('the header and footer, scored against the source’s', () => {
     const report = siteImportFrameFidelity(aglyn, changed(aglyn.tree, (nodes) => {
       for (const id of idsOf(nodes, (node) => node.componentId === 'socialLinks')) drop(nodes, id)
     }))
-    // One profile is also a link in the source's columns, which the footer still shows.
-    expect(report.social).toEqual({ source: 7, built: 1, ratio: 1 / 7 })
+    // All seven are the element's icons, TikTok among them, so none survives it.
+    expect(report.social).toEqual({ source: 7, built: 0, ratio: 0 })
     expect(report.lowest).toBe('social')
   })
 

@@ -144,8 +144,11 @@ link labeled anything at all still counts.
 
 The links work in a button's or a link's **External URL**: pick **Phone link** from the
 variable picker there and the button dials your number, or **Instagram link** and it
-opens your profile. Change the number or the profile in **Business details** and every
-page that uses it follows, with no variable of your own to keep up to date.
+opens your profile. The **Social Links** element takes them the same way: put each
+network's link variable in its field (Facebook, Instagram, Twitter / X, LinkedIn,
+YouTube, TikTok or GitHub) and the row shows an icon for every profile you have.
+Change the number or the profile in **Business details** and every page that uses it
+follows, with no variable of your own to keep up to date.
 
 A detail the site hasn't set renders as nothing, never as the token. The canvas and
 **Preview** fill these in from the site you are editing, exactly as the published page
