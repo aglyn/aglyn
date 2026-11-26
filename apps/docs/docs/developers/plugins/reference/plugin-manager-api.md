@@ -1128,6 +1128,7 @@ registerSitePathKind({
 | --- | --- |
 | `registerSitePathKind(kind, { pluginId? })` | One segment has one owner: another plugin claiming it throws naming both, and the incumbent keeps serving. A segment is one path segment. |
 | `listSitePathKinds()` | Every declared kind, with its owner. |
+| `registerSiteBuiltInPage({ path, title }, { pluginId? })` / `listSiteBuiltInPages()` | A page the plugin serves at one fixed address (`order-status`), named on the Analytics page as a built-in page. One owner per address. |
 
 Declarative, so the console reads the records itself: one `where(slugField, 'in', …)`
 per thirty VISITED slugs, never the whole collection. Register it from your console
