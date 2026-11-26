@@ -195,6 +195,8 @@ export function stripeCurrency(currency: CheckoutCurrency): string {
  * `GET commerce/currency?hostId=` — the public answer a storefront prices
  * from: which currencies the store sells in, its rounding rules, and the
  * day's rates for exactly those. CDN-cached ten minutes: it changes daily.
+ * With `setup=1`, the console's setup answer instead: the stored settings
+ * and every rate (all public: the ECB publishes them), never cached.
  */
 export const currencyHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(req.query.hostId ?? '')
@@ -205,6 +207,18 @@ export const currencyHandler: PluginApiHandler = async (req, res) => {
       loadFxRates(),
     ])
     const context = storeCurrencyContextFrom(storeSnap.data(), rates)
+    if (String(req.query.setup ?? '') === '1') {
+      // The console's Currencies card previews a currency before it is
+      // saved, so it reads every rate and the settings as stored, uncached:
+      // a change made a moment ago shows at once.
+      const setup: CommerceModel.CurrencySetupAnswer = {
+        base: context.base,
+        settings: context.settings ?? null,
+        allRates: rates ?? null,
+      }
+      res.setHeader('Cache-Control', 'private, no-store')
+      return res.status(200).json(setup)
+    }
     res.setHeader('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=3600')
     return res.status(200).json(CommerceModel.publicCurrencyAnswer(context, Date.now()))
   } catch (error) {

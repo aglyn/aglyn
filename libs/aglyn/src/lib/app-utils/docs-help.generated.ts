@@ -322,6 +322,11 @@ export const PLUGIN_DOCS = {
     title: 'Saved views',
     excerpt: 'Keep a CRM list\'s filters, columns and sort under a name, open it from the views menu or a link, share it with the team, and use a contacts view as an email audience.',
   },
+  currencies: {
+    path: '/commerce-and-bookings/commerce/currencies',
+    title: 'Sell in other currencies',
+    excerpt: 'Show and charge prices in your shoppers\' own currencies, with daily rates, rounding, a buffer, and fixed prices where you want them.',
+  },
   datasets: {
     path: '/content-and-data/datasets/overview',
     title: 'Datasets & Dynamic Content',
@@ -650,6 +655,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   crmSharing: ['#default-sharing-for-new-records', '#apply-to-existing-records', '#share-a-record-with-more-sites', '#all-sites-except-some', '#what-a-shared-record-looks-like', '#sharing-card', '#share-a-record-by-hand', '#several-records-at-once', '#sharing-rules', '#access-read-only-or-read-and-edit', '#sharing-is-not-consent', '#who-can-do-this', '#related'],
   crmTasks: ['#task-picklists', '#the-tasks-page', '#the-calendar-view', '#snoozing-a-task', '#selecting-exporting-and-acting-on-many', '#import-from-csv', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#organization-tasks', '#tasks-on-a-contact-company-or-deal', '#reminders', '#turning-reminders-off', '#next-activity', '#the-daily-digest', '#turning-it-off', '#the-dashboard-card', '#who-can-do-what', '#related'],
   crmViews: ['#the-views-control', '#a-view-is-a-link', '#filters', '#filters-on-the-contacts-list', '#filters-on-the-other-lists', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],
+  currencies: ['#turn-on-other-currencies', '#how-shoppers-get-their-currency', '#exchange-rates', '#rounding', '#price-adjustment', '#fixed-prices', '#prices-that-include-tax', '#charging-and-payouts', '#ship-to-other-countries', '#related'],
   datasets: ['#organization-data-page', '#model-builder', '#typed-documents', '#sample-rows', '#filter-records', '#relations', '#query-layer', '#repeatable-components', '#record-pages', '#who-a-dataset-is-shared-with', '#default-dataset-sharing', '#import--export', '#related'],
   deals: ['#pipelines', '#stages', '#the-board-and-the-table', '#import-from-csv', '#creating-a-deal', '#type-and-lead-source', '#contact-roles', '#line-items', '#moving-winning-and-losing', '#a-won-deal-makes-its-contact-a-customer', '#a-deals-page', '#deal-properties', '#deals-on-a-record', '#files', '#related'],
   deliveryApps: ['#connect-a-store', '#the-menu', '#match-items', '#taking-orders'],

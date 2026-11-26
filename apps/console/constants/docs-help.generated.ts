@@ -297,6 +297,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/ai/crm-by-ai',
     title: 'The AI CRM built into Aglyn',
   },
+  currencies: {
+    path: '/commerce-and-bookings/commerce/currencies',
+    title: 'Sell in other currencies',
+  },
   customDomains: {
     path: '/building-sites/custom-domains/overview',
     title: 'Custom Domains',
@@ -1067,6 +1071,7 @@ export const DOCS_HELP_ANCHORS = {
   createWithAi: ['#the-button', '#where-it-appears', '#what-you-get', '#without-the-add-on', '#when-it-is-not-there', '#related'],
   crm: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-and-export', '#segments', '#everywhere-the-crm-shows-up', '#capture-replies', '#at-the-organization-level', '#known-by', '#who-can-open-the-crm', '#one-sender-one-crm', '#related'],
   crmByAi: ['#summarize-a-record', '#summaries-are-reused-until-the-record-changes', '#draft-an-email', '#match-columns', '#what-is-sent', '#set-up-the-crm', '#who-can-use-it', '#related'],
+  currencies: ['#turn-on-other-currencies', '#how-shoppers-get-their-currency', '#exchange-rates', '#rounding', '#price-adjustment', '#fixed-prices', '#prices-that-include-tax', '#charging-and-payouts', '#ship-to-other-countries', '#related'],
   customDomains: ['#connect-a-domain', '#related'],
   customFields: ['#define-a-field', '#fields-per-record', '#where-values-show', '#currency-fields', '#save-a-form-field', '#picklist-values', '#task-picklists', '#over-the-api', '#retire-restore-delete', '#export-fields', '#recompute-next-activity', '#related'],
   customRoles: ['#create-a-custom-role', '#point-of-sale-permissions', '#site-access-narrows', '#workspace-permissions', '#dataset-permissions', '#site-permissions', '#order-permissions', '#reservation-permissions', '#booking-permissions', '#funnel-and-campaign-permissions', '#marketplace-site-permissions', '#marketplace-publisher-permissions', '#crm-settings-permission', '#crm-colleague-templates-permission', '#crm-move-stages-permission', '#automation-and-domain-permissions', '#integration-permissions', '#email-and-inbox-permissions', '#api-keys-privacy-and-holds', '#ai-permissions', '#effective-permissions', '#per-member-overrides', '#tips', '#related'],
