@@ -77,6 +77,8 @@ struct AnalyticsView: View {
   }
 
   private let funnelsScreen = "funnels.list"
+  /// The store's product editor, by its id (the commerce plugin's `commerceProductScreen`); core names no plugin type.
+  private let productScreen = "commerce.product"
 
   private var glanceWidgets: [NativeWidget] { model.registry.widgets(for: .aglyn).filter { hostID != nil || !$0.requiresSite } }
 
@@ -156,7 +158,7 @@ struct AnalyticsView: View {
         } else {
           scroll {
             SitePagesTrafficCard(reader: reader, api: model.api, hostID: hostID, refresh: model.refreshToken, upgrade: openPlans) {
-              drill = AnalyticsPageDrill(screenID: $0, path: $1)
+              openPage($0)
             }
           }
         }
@@ -184,6 +186,18 @@ struct AnalyticsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
     .background(AglynColor.paper)
+  }
+
+  /// What a Pages row names (AGL-4253): a page opens its own traffic, a product its editor (where the store is on), and
+  /// anything else with a live address the live page, in the in-app browser.
+  private func openPage(_ label: SitePageLabel) {
+    if let screenID = label.screenID {
+      drill = AnalyticsPageDrill(screenID: screenID, path: label.title)
+    } else if let productID = label.productID, model.registry.screen(productScreen) != nil {
+      navigation.push(.screen(productScreen, ["productId": productID]))
+    } else if let url = label.liveURL {
+      navigation.openWeb(AglynWebPage(url))
+    }
   }
 
   /// The plans, where the upgrade the card names is bought (the console's Upgrade goes to Billing).

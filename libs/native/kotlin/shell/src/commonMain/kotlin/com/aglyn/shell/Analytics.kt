@@ -46,6 +46,9 @@ const val HOST_ANALYTICS_SLOT = "hostAnalytics"
 
 private const val FUNNELS_SCREEN = "funnels.list"
 
+/** The store's product editor, by its id (the commerce plugin's `COMMERCE_PRODUCT_SCREEN`); core names no plugin type. */
+private const val PRODUCT_SCREEN = "commerce.product"
+
 /** One section of the Analytics list. */
 internal enum class AnalyticsSection(val id: String, val title: String, val supporting: String, val icon: String) {
   TRAFFIC("traffic", "Traffic", "Page views, visitors and where they came from", "bar_chart"),
@@ -55,7 +58,7 @@ internal enum class AnalyticsSection(val id: String, val title: String, val supp
 }
 
 @Composable
-internal fun AnalyticsScreen(services: ShellServices, context: NativePluginContext) {
+internal fun AnalyticsScreen(services: ShellServices, context: NativePluginContext, openWeb: (String) -> Unit = {}) {
   val hostId = context.hostId ?: return EmptyState("Pick a site first", body = "Analytics are one site's.", icon = AglynIcons.named("public"))
   val version by services.registry.version.collectAsState()
   val funnelWidgets = remember(version) { services.registry.widgets(NativeApp.AGLYN, HOST_ANALYTICS_SLOT) }
@@ -109,7 +112,18 @@ internal fun AnalyticsScreen(services: ShellServices, context: NativePluginConte
                 Text(open.second, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 PageTrafficCard(services.firestore, services.api, hostId, open.first, upgrade)
               } else {
-                SitePagesTrafficCard(services.firestore, services.api, hostId, upgrade, open = { id, path -> drill = id to path })
+                SitePagesTrafficCard(services.firestore, services.api, hostId, upgrade, open = { label ->
+                  // A page opens its own traffic, a product its editor (where the store is on), anything else with a
+                  // live address the live page in the in-app browser (AGL-4253).
+                  val screen = label.screenId
+                  val product = label.productId
+                  val live = label.liveUrl
+                  when {
+                    screen != null -> drill = screen to label.title
+                    product != null && services.registry.screen(PRODUCT_SCREEN) != null -> context.navigate(PRODUCT_SCREEN, mapOf("product" to product))
+                    live != null -> openWeb(live)
+                  }
+                })
               }
             }
             AnalyticsSection.FUNNELS -> if (funnelWidgets.isNotEmpty()) {
