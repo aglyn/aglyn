@@ -35,6 +35,7 @@ import {
 } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
 import * as CommerceModel from '../../../model'
+import { ProductWriteInField } from '../../product-add-ons'
 import { usd } from './pos-api'
 import { POS_TOUCH_PX } from './pos-product-grid.component'
 
@@ -216,6 +217,20 @@ export function PosItemDialog(props: PosItemDialogProps) {
             </Typography>
           ) : null}
           {groups.map((group) => {
+            // A write-in (the gear set builder): the cashier types the answer the customer gives.
+            if (CommerceModel.modifierGroupIsWriteIn(group)) {
+              return (
+                <ProductWriteInField
+                  key={group.id}
+                  group={group}
+                  groups={groups}
+                  variantId={variant?.id}
+                  value={modifiers}
+                  onChange={setModifiers}
+                  formatCents={money}
+                />
+              )
+            }
             const count = modifiers.filter((pick) => pick.groupId === group.id).length
             const rule = CommerceModel.modifierGroupRequired(group)
               ? group.max === 1

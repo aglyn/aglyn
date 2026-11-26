@@ -22,7 +22,13 @@ import Collapse from '@mui/material/Collapse'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
 import { useRef, useState, type ReactNode } from 'react'
-import type { ModifierSelection, ProductModifierGroup } from '../model/product-modifiers'
+import {
+  cleanWriteIn,
+  modifierGroupIsWriteIn,
+  modifierLineText,
+  type ModifierSelection,
+  type ProductModifierGroup,
+} from '../model/product-modifiers'
 import { ProductBuilderContext, type ProductBuilderPicks } from './product-builder-context'
 
 /*
@@ -51,10 +57,14 @@ export function productBuilderPicks(input: {
   const { product, variant, addOns, quantity, ready, problem, total } = input
   const names: string[] = []
   for (const group of product.modifierGroups ?? []) {
+    const writeIn = modifierGroupIsWriteIn(group)
     for (const option of group.options) {
-      if (addOns.some((pick) => pick.groupId === group.id && pick.optionId === option.id)) {
-        names.push(option.name)
-      }
+      const pick = addOns.find((entry) => entry.groupId === group.id && entry.optionId === option.id)
+      if (!pick) continue
+      // A write-in names its answer ("Name on jersey: SMITH"), as the order line does.
+      const text = writeIn ? cleanWriteIn(pick.text, group) : ''
+      if (writeIn && !text) continue
+      names.push(modifierLineText({ name: option.name, group: group.name, text, nameOnOrder: group.nameOnOrder }))
     }
   }
   const options = Object.fromEntries(
@@ -65,7 +75,11 @@ export function productBuilderPicks(input: {
     productName: product.name,
     ...(variant && variant.id !== 'default' ? { variantId: variant.id } : {}),
     options,
-    modifiers: addOns.map((pick) => ({ groupId: pick.groupId, optionId: pick.optionId })),
+    modifiers: addOns.map((pick) => ({
+      groupId: pick.groupId,
+      optionId: pick.optionId,
+      ...(pick.text ? { text: pick.text } : {}),
+    })),
     addOnNames: names,
     quantity,
     ready: ready && Boolean(variant),

@@ -32,6 +32,7 @@ import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import { useId, useState, type ReactNode } from 'react'
 import {
+  modifierGroupIsWriteIn,
   modifierGroupRequired,
   modifierOptionIsCombo,
   modifierOptionPriceCents,
@@ -39,7 +40,7 @@ import {
   type ProductModifierGroup,
   type ProductModifierOption,
 } from '../model/product-modifiers'
-import { addOnGroupHint, withGroupAnswer } from './product-add-ons'
+import { addOnGroupHint, ProductWriteInField, withGroupAnswer } from './product-add-ons'
 
 /*
  * THE PRODUCT BUILDER'S PICTURE CARDS (AGL-4205).
@@ -316,6 +317,21 @@ export function ProductChoiceCards(props: ProductChoiceCardsProps) {
         </CardGroup>
       ))}
       {groups.map((group) => {
+        // A write-in (the gear set builder) is a text field among the cards: there is nothing to picture.
+        if (modifierGroupIsWriteIn(group)) {
+          return (
+            <ProductWriteInField
+              key={group.id}
+              group={group}
+              groups={groups}
+              variantId={variantId}
+              value={value}
+              onChange={onChange}
+              formatCents={formatCents}
+              disabled={disabled}
+            />
+          )
+        }
         const chosen = value.filter((pick) => pick.groupId === group.id).map((pick) => pick.optionId)
         return (
           <CardGroup
