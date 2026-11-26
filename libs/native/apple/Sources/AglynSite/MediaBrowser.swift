@@ -463,6 +463,8 @@ struct MediaBulkPanel: View {
   let canEdit: Bool
   let busy: Bool
   let move: (String?) -> Void
+  /// The move to the other library (its label, and what it does), on a site's media screen only.
+  var libraryMove: (label: String, run: () -> Void)? = nil
   let tag: (_ add: Bool) -> Void
   let delete: () -> Void
   let clear: () -> Void
@@ -510,6 +512,10 @@ struct MediaBulkPanel: View {
           }
           .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
           .accessibilityIdentifier("media-bulk-move")
+          if let libraryMove {
+            Button(action: libraryMove.run) { bulkLabel(libraryMove.label, systemImage: "arrow.left.arrow.right") }
+              .buttonStyle(.plain).accessibilityIdentifier("media-bulk-library-move")
+          }
           Button { tag(true) } label: { bulkLabel("Add tag…", systemImage: "tag") }
             .buttonStyle(.plain).accessibilityIdentifier("media-bulk-add-tag")
           Button { tag(false) } label: { bulkLabel("Remove tag…", systemImage: "tag.slash") }

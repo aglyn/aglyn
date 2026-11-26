@@ -2487,7 +2487,7 @@ function orgCollectionRows() {
     }
     const routes = (plugin.contributes?.console?.routes ?? []).map((route) => route.replace(/^\//, ''))
     for (const declaration of declared) {
-      const { name, label, mediaScan, mediaScanReason, routeSlug, siteField, holdsTransferWhile } = declaration
+      const { name, label, mediaScan, mediaScanReason, routeSlug, siteField, holdsTransferWhile, mediaIdsField } = declaration
       const what = `${where} "${name ?? ''}"`
       if (typeof name !== 'string' || !name.trim()) throw new Error(`${where}: a collection needs a "name"`)
       const held = owners.get(name)
@@ -2510,6 +2510,9 @@ function orgCollectionRows() {
       }
       if (siteField !== undefined && (typeof siteField !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(siteField))) {
         throw new Error(`${what}: "siteField" is the plain name of the field naming a document's site`)
+      }
+      if (mediaIdsField !== undefined && (typeof mediaIdsField !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(mediaIdsField))) {
+        throw new Error(`${what}: "mediaIdsField" is the plain name of the array field holding library files by id`)
       }
       if (holdsTransferWhile !== undefined) {
         const { field, values } = holdsTransferWhile ?? {}

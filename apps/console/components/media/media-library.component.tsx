@@ -259,6 +259,9 @@ import {
   removeMediaTag,
 } from './media-detail-copy'
 import { mediaUndoAction } from './media-undo-action'
+import type { MediaLibraryDirection } from '@aglyn/aglyn/app-utils/media-library-move'
+import { MediaLibraryMoveDialog } from './media-library-move-dialog.component'
+import { moveToOtherLibraryLabel } from './media-library-move-copy'
 import { useMediaPages } from './use-media-pages'
 import {
   coverageOf,
@@ -301,6 +304,14 @@ export interface MediaLibraryComponentProps {
    * it.
    */
   kind?: Aglyn.MediaPickerKind
+  /**
+   * The site and workspace a file here can move between (the site's Media
+   * page passes both tabs the same pair). Set, the drawer and a selection
+   * offer "Move to this site's library" from the organization library, or
+   * "Move to organization library" from the site's. Absent (the workspace
+   * Media page, a picker), there is no other library to name.
+   */
+  libraryMove?: { orgId: string; hostId: string }
 }
 
 /**
@@ -554,7 +565,10 @@ function uploadRefusalOptions(payload: { code?: unknown } | null | undefined) {
 }
 
 export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
-  const { hostId, orgId, onSelect, pickedId, forHostId, kind } = props
+  const { hostId, orgId, onSelect, pickedId, forHostId, kind, libraryMove } = props
+  /** Where a file in THIS library goes when it moves to the other one. */
+  const libraryMoveDirection: MediaLibraryDirection = orgId ? 'to-site' : 'to-org'
+  const [libraryMoveIds, setLibraryMoveIds] = useState<string[] | null>(null)
   // Scope plumbing: one library serves both a site's media and the org
   // DAM — only the Firestore base path and the API identity differ.
   const scopeCollection = orgId ? 'orgs' : 'hosts'
@@ -4651,6 +4665,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               {'Move to folder…'}
             </Button>
           </BlockedControl>
+          {libraryMove ? (
+            <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+              <Button
+                size="small"
+                disabled={mediaWriteHeld}
+                onClick={() => setLibraryMoveIds([...selected])}
+              >
+                {moveToOtherLibraryLabel(libraryMoveDirection)}
+              </Button>
+            </BlockedControl>
+          ) : null}
           <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
             <Button
               size="small"
@@ -4975,6 +5000,31 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           {'Load more'}
         </Button>
       ) : null}
+      {libraryMove && libraryMoveIds && user ? (
+        <MediaLibraryMoveDialog
+          open
+          user={user}
+          orgId={libraryMove.orgId}
+          hostId={libraryMove.hostId}
+          direction={libraryMoveDirection}
+          mediaIds={libraryMoveIds}
+          nameOf={(mediaId) =>
+            String((items as any[]).find((item) => item.$id === mediaId)?.fileName ?? mediaId)
+          }
+          onClose={() => setLibraryMoveIds(null)}
+          onFinished={({ movedIds, message, variant }) => {
+            setLibraryMoveIds(null)
+            // Only what moved leaves the selection; the rest is the retry.
+            forgetSelected(movedIds)
+            if (editor && movedIds.includes(editor.id)) setEditor(null)
+            if (movedIds.length) refresh()
+            enqueueSnackbar(message, {
+              variant,
+              ...(variant === 'success' ? { persist: false } : { persist: true }),
+            })
+          }}
+        />
+      ) : null}
       <Drawer
         anchor="right"
         open={Boolean(editor)}
@@ -5085,6 +5135,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   }}
                 >
                   {'Replace file'}
+                </Button>
+              </BlockedControl>
+            ) : null}
+            {editor?.media && libraryMove ? (
+              <BlockedControl blocked={mediaWriteRefused} reason={mediaWriteReason}>
+                <Button
+                  size="small"
+                  disabled={mediaWriteHeld}
+                  onClick={() => setLibraryMoveIds([editor.id])}
+                >
+                  {moveToOtherLibraryLabel(libraryMoveDirection)}
                 </Button>
               </BlockedControl>
             ) : null}
