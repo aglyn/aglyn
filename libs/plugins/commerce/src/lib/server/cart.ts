@@ -299,7 +299,7 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
       ...(askShippingCountry
         ? {
             needsShippingCountry: true,
-            shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+            shippingCountries: [...askShippingCountry],
           }
         : {}),
     })
@@ -326,7 +326,7 @@ async function shippingCountryNeeded(input: {
   lines: ResolvedCartLine[]
   productsById: Map<string, CommerceModel.HostProduct | null>
   subtotalCents: number
-}): Promise<boolean> {
+}): Promise<readonly string[] | false> {
   let physical = false
   let totalGrams = 0
   for (const line of input.lines) {
@@ -350,7 +350,7 @@ async function shippingCountryNeeded(input: {
       cart: { subtotalCents: input.subtotalCents, totalGrams },
       destination: {},
     })
-    return plan.refusal === 'destination-required'
+    return plan.refusal === 'destination-required' ? plan.countries : false
   } catch {
     // The cart still shows; checkout asks, as it always has.
     return false

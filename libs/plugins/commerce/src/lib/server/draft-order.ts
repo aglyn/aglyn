@@ -448,14 +448,14 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         error: 'Enter the postal code this order ships to.',
         needsShippingCountry: true,
         needsShippingPostalCode: true,
-        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+        shippingCountries: [...CommerceModel.checkoutShippingCountries(shippingSettings)],
       })
     }
     if (shippingPlan.refusal === 'destination-required') {
       return res.status(400).json({
         error: 'Choose where this order ships to.',
         needsShippingCountry: true,
-        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+        shippingCountries: [...CommerceModel.checkoutShippingCountries(shippingSettings)],
       })
     }
     if (shippingPlan.refusal === 'destination-unserved') {
@@ -468,7 +468,7 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
           'that country'
         }.`,
         needsShippingCountry: true,
-        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+        shippingCountries: [...CommerceModel.checkoutShippingCountries(shippingSettings)],
       })
     }
     // No rate of the merchant's reaches this order (AGL-2232). Above the

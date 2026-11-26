@@ -39,6 +39,9 @@
 // Factories, not bare `jest.mock`: the module graph under
 // `@aglyn/tenant-data-admin` reaches `undici`, and an auto-mock still
 // evaluates the real graph to derive its shape.
+// The section index is its own reader with its own spec (site-section-index.spec.ts);
+// here it answers nothing, so these cases count only what they set up.
+jest.mock('./site-section-index', () => ({ retrieveSiteSections: jest.fn(async () => []) }))
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: { app: jest.fn() },
@@ -54,7 +57,7 @@ jest.mock('@aglyn/tenant-data-admin/render-cache', () => ({
   withRenderCache: async (options: { read: () => Promise<unknown> }) =>
     options.read(),
 }))
-jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
+jest.mock('./template-screens', () => ({
   __esModule: true,
   default: jest.fn(async () => new Set<string>()),
   getTemplateScreenIds: jest.fn(async () => new Set<string>()),
@@ -67,18 +70,18 @@ jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
 // it is the subject of the typo test, and a faked one would assert nothing.
 jest.mock('@aglyn/aglyn/server', () => {
   const collectionEntries = jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/collection-entries',
+    '@aglyn/aglyn/app-utils/collection-entries',
   )
   return {
     __esModule: true,
     screenRoutePathToUrl: jest.requireActual(
-      '../../../libs/aglyn/src/lib/app-utils/screen-route',
+      '@aglyn/aglyn/app-utils/screen-route',
     ).screenRoutePathToUrl,
     hostCollectionKind: jest.requireActual(
-      '../../../libs/aglyn/src/lib/app-utils/collection-kind',
+      '@aglyn/aglyn/app-utils/collection-kind',
     ).hostCollectionKind,
     decodeStoredNodes: jest.requireActual(
-      '../../../libs/aglyn/src/lib/app-utils/stored-nodes',
+      '@aglyn/aglyn/app-utils/stored-nodes',
     ).decodeStoredNodes,
     COLLECTION_SEARCH_FUSE_OPTIONS:
       collectionEntries.COLLECTION_SEARCH_FUSE_OPTIONS,
@@ -87,12 +90,12 @@ jest.mock('@aglyn/aglyn/server', () => {
 })
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import type { SearchResult } from '../utils/search-content'
+import type { SearchResult } from './site-search'
 import searchContent, {
   filterSearchResults,
   SEARCH_FACET_ALL,
   searchResultFacets,
-} from '../utils/search-content'
+} from './site-search'
 
 const HOST_ID = 'host_acme'
 

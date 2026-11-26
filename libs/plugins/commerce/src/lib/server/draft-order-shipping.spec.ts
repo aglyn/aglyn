@@ -395,12 +395,15 @@ describe('draft-order shipping options (AGL-1792)', () => {
     }
   })
 
-  it('keeps all six countries when one rate serves them all', async () => {
+  it('collects an address in every country when one rest-of-world rate serves them all', async () => {
     const { result, body } = await runDraft({
       settings: { shipping: byWeight },
     })
     expect(result.status).toBe(200)
-    expect(allowedCountries(body)).toEqual(['US', 'CA', 'GB', 'AU', 'DE', 'FR'])
+    expect(allowedCountries(body)).toEqual(
+      expect.arrayContaining(['US', 'NZ', 'IE', 'AU', 'GB', 'NL']),
+    )
+    expect(allowedCountries(body).length).toBeGreaterThan(200)
     expect(shippingOptions(body)).toEqual([
       {
         name: 'By weight',

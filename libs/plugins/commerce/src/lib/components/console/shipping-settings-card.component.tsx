@@ -23,6 +23,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   AlertTitle,
+  Autocomplete,
   Button,
   Divider,
   FormControlLabel,
@@ -51,6 +52,19 @@ import {
 
 export interface ShippingSettingsCardProps {
   hostId: string
+}
+
+/** Every country checkout can ship to, plus rest of world, for a zone. */
+const ZONE_COUNTRY_OPTIONS: string[] = [
+  '*',
+  ...[...CommerceModel.STRIPE_SHIPPING_COUNTRY_CODES].sort((a, b) =>
+    zoneCountryLabel(a).localeCompare(zoneCountryLabel(b)),
+  ),
+]
+
+function zoneCountryLabel(code: string): string {
+  if (code === '*') return 'Rest of world'
+  return CommerceModel.CHECKOUT_SHIPPING_COUNTRY_NAMES[code] ?? code
 }
 
 /**
@@ -276,20 +290,31 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
               size="small"
               sx={{ width: 180 }}
             />
-            <TextField
-              label="Countries"
-              value={zone.countries.join(', ')}
-              onChange={(event) =>
+            <Autocomplete
+              multiple
+              size="small"
+              sx={{ flex: 1, minWidth: 240 }}
+              options={ZONE_COUNTRY_OPTIONS}
+              value={zone.countries}
+              filterSelectedOptions
+              getOptionLabel={zoneCountryLabel}
+              onChange={(_event, countries) =>
                 updateZone(index, {
-                  countries: event.target.value
-                    .split(',')
-                    .map((code) => code.trim().toUpperCase())
-                    .filter(Boolean),
+                  // Rest of world stands alone: a zone that names it AND a
+                  // country says the same thing twice.
+                  countries:
+                    countries.at(-1) === '*'
+                      ? ['*']
+                      : countries.filter((code) => code !== '*'),
                 })
               }
-              size="small"
-              sx={{ flex: 1 }}
-              placeholder="US, CA — or * for everywhere else"
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Countries"
+                  placeholder={zone.countries.length ? '' : 'Search countries, or Rest of world'}
+                />
+              )}
             />
             <Button
               size="small"

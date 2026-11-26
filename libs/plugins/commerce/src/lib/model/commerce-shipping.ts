@@ -310,14 +310,10 @@ function shippableOnly(
 export const MAX_CHECKOUT_SHIPPING_OPTIONS = 5
 
 /**
- * Destinations a storefront Checkout Session collects an address for, and
- * therefore the destinations shipping rates are resolved against (AGL-1707).
- *
- * NOT narrowed to the zones the merchant configured: narrowing would block
- * checkouts that complete today, turning a money fix into lost sales. The
- * wider list only means a shopper outside the merchant's zones is offered some
- * rate rather than none. Shared by cart checkout and buy-now (AGL-1720) so the
- * two paths cannot drift into offering different destinations.
+ * The destinations a Checkout Session collects an address for when the
+ * merchant prices NO shipping (AGL-1707), and so the session such a store has
+ * always had. A merchant with zones gets `checkoutShippingCountries` instead:
+ * the countries their zones name, or every country for rest of world.
  */
 export const CHECKOUT_SHIPPING_COUNTRIES = [
   'US',
@@ -382,19 +378,297 @@ export function resolveCheckoutShippingOptions(
   )
 }
 
-/** {@link CHECKOUT_SHIPPING_COUNTRIES} as plain codes, for the apps' draft order (AGL-3841). */
+/**
+ * {@link CHECKOUT_SHIPPING_COUNTRIES} as plain codes: the apps' draft order
+ * falls back to it only when the server names no list (AGL-3841).
+ */
 export const CHECKOUT_SHIPPING_COUNTRY_CODES: readonly string[] = CHECKOUT_SHIPPING_COUNTRIES
 
-/** Shopper-facing names for the collectable destinations (AGL-1721). */
+/**
+ * Every country Stripe Checkout can collect a shipping address for
+ * (`shipping_address_collection[allowed_countries]`), with the name a shopper
+ * reads. A rest-of-world `*` zone opens checkout to all of them.
+ */
 export const CHECKOUT_SHIPPING_COUNTRY_NAMES: Readonly<Record<string, string>> =
   {
-    US: 'United States',
-    CA: 'Canada',
-    GB: 'United Kingdom',
-    AU: 'Australia',
-    DE: 'Germany',
-    FR: 'France',
+    AC: "Ascension Island",
+    AD: "Andorra",
+    AE: "United Arab Emirates",
+    AF: "Afghanistan",
+    AG: "Antigua & Barbuda",
+    AI: "Anguilla",
+    AL: "Albania",
+    AM: "Armenia",
+    AO: "Angola",
+    AQ: "Antarctica",
+    AR: "Argentina",
+    AT: "Austria",
+    AU: "Australia",
+    AW: "Aruba",
+    AX: "Åland Islands",
+    AZ: "Azerbaijan",
+    BA: "Bosnia & Herzegovina",
+    BB: "Barbados",
+    BD: "Bangladesh",
+    BE: "Belgium",
+    BF: "Burkina Faso",
+    BG: "Bulgaria",
+    BH: "Bahrain",
+    BI: "Burundi",
+    BJ: "Benin",
+    BL: "St. Barthélemy",
+    BM: "Bermuda",
+    BN: "Brunei",
+    BO: "Bolivia",
+    BQ: "Caribbean Netherlands",
+    BR: "Brazil",
+    BS: "Bahamas",
+    BT: "Bhutan",
+    BV: "Bouvet Island",
+    BW: "Botswana",
+    BY: "Belarus",
+    BZ: "Belize",
+    CA: "Canada",
+    CD: "Congo - Kinshasa",
+    CF: "Central African Republic",
+    CG: "Congo - Brazzaville",
+    CH: "Switzerland",
+    CI: "Côte d’Ivoire",
+    CK: "Cook Islands",
+    CL: "Chile",
+    CM: "Cameroon",
+    CN: "China",
+    CO: "Colombia",
+    CR: "Costa Rica",
+    CV: "Cape Verde",
+    CW: "Curaçao",
+    CY: "Cyprus",
+    CZ: "Czechia",
+    DE: "Germany",
+    DJ: "Djibouti",
+    DK: "Denmark",
+    DM: "Dominica",
+    DO: "Dominican Republic",
+    DZ: "Algeria",
+    EC: "Ecuador",
+    EE: "Estonia",
+    EG: "Egypt",
+    EH: "Western Sahara",
+    ER: "Eritrea",
+    ES: "Spain",
+    ET: "Ethiopia",
+    FI: "Finland",
+    FJ: "Fiji",
+    FK: "Falkland Islands",
+    FO: "Faroe Islands",
+    FR: "France",
+    GA: "Gabon",
+    GB: "United Kingdom",
+    GD: "Grenada",
+    GE: "Georgia",
+    GF: "French Guiana",
+    GG: "Guernsey",
+    GH: "Ghana",
+    GI: "Gibraltar",
+    GL: "Greenland",
+    GM: "Gambia",
+    GN: "Guinea",
+    GP: "Guadeloupe",
+    GQ: "Equatorial Guinea",
+    GR: "Greece",
+    GS: "South Georgia & South Sandwich Islands",
+    GT: "Guatemala",
+    GU: "Guam",
+    GW: "Guinea-Bissau",
+    GY: "Guyana",
+    HK: "Hong Kong SAR China",
+    HN: "Honduras",
+    HR: "Croatia",
+    HT: "Haiti",
+    HU: "Hungary",
+    ID: "Indonesia",
+    IE: "Ireland",
+    IL: "Israel",
+    IM: "Isle of Man",
+    IN: "India",
+    IO: "British Indian Ocean Territory",
+    IQ: "Iraq",
+    IS: "Iceland",
+    IT: "Italy",
+    JE: "Jersey",
+    JM: "Jamaica",
+    JO: "Jordan",
+    JP: "Japan",
+    KE: "Kenya",
+    KG: "Kyrgyzstan",
+    KH: "Cambodia",
+    KI: "Kiribati",
+    KM: "Comoros",
+    KN: "St. Kitts & Nevis",
+    KR: "South Korea",
+    KW: "Kuwait",
+    KY: "Cayman Islands",
+    KZ: "Kazakhstan",
+    LA: "Laos",
+    LB: "Lebanon",
+    LC: "St. Lucia",
+    LI: "Liechtenstein",
+    LK: "Sri Lanka",
+    LR: "Liberia",
+    LS: "Lesotho",
+    LT: "Lithuania",
+    LU: "Luxembourg",
+    LV: "Latvia",
+    LY: "Libya",
+    MA: "Morocco",
+    MC: "Monaco",
+    MD: "Moldova",
+    ME: "Montenegro",
+    MF: "St. Martin",
+    MG: "Madagascar",
+    MK: "North Macedonia",
+    ML: "Mali",
+    MM: "Myanmar (Burma)",
+    MN: "Mongolia",
+    MO: "Macao SAR China",
+    MQ: "Martinique",
+    MR: "Mauritania",
+    MS: "Montserrat",
+    MT: "Malta",
+    MU: "Mauritius",
+    MV: "Maldives",
+    MW: "Malawi",
+    MX: "Mexico",
+    MY: "Malaysia",
+    MZ: "Mozambique",
+    NA: "Namibia",
+    NC: "New Caledonia",
+    NE: "Niger",
+    NG: "Nigeria",
+    NI: "Nicaragua",
+    NL: "Netherlands",
+    NO: "Norway",
+    NP: "Nepal",
+    NR: "Nauru",
+    NU: "Niue",
+    NZ: "New Zealand",
+    OM: "Oman",
+    PA: "Panama",
+    PE: "Peru",
+    PF: "French Polynesia",
+    PG: "Papua New Guinea",
+    PH: "Philippines",
+    PK: "Pakistan",
+    PL: "Poland",
+    PM: "St. Pierre & Miquelon",
+    PN: "Pitcairn Islands",
+    PR: "Puerto Rico",
+    PS: "Palestinian Territories",
+    PT: "Portugal",
+    PY: "Paraguay",
+    QA: "Qatar",
+    RE: "Réunion",
+    RO: "Romania",
+    RS: "Serbia",
+    RU: "Russia",
+    RW: "Rwanda",
+    SA: "Saudi Arabia",
+    SB: "Solomon Islands",
+    SC: "Seychelles",
+    SE: "Sweden",
+    SG: "Singapore",
+    SH: "St. Helena",
+    SI: "Slovenia",
+    SJ: "Svalbard & Jan Mayen",
+    SK: "Slovakia",
+    SL: "Sierra Leone",
+    SM: "San Marino",
+    SN: "Senegal",
+    SO: "Somalia",
+    SR: "Suriname",
+    SS: "South Sudan",
+    ST: "São Tomé & Príncipe",
+    SV: "El Salvador",
+    SX: "Sint Maarten",
+    SZ: "Eswatini",
+    TA: "Tristan da Cunha",
+    TC: "Turks & Caicos Islands",
+    TD: "Chad",
+    TF: "French Southern Territories",
+    TG: "Togo",
+    TH: "Thailand",
+    TJ: "Tajikistan",
+    TK: "Tokelau",
+    TL: "Timor-Leste",
+    TM: "Turkmenistan",
+    TN: "Tunisia",
+    TO: "Tonga",
+    TR: "Türkiye",
+    TT: "Trinidad & Tobago",
+    TV: "Tuvalu",
+    TW: "Taiwan",
+    TZ: "Tanzania",
+    UA: "Ukraine",
+    UG: "Uganda",
+    US: "United States",
+    UY: "Uruguay",
+    UZ: "Uzbekistan",
+    VA: "Vatican City",
+    VC: "St. Vincent & Grenadines",
+    VE: "Venezuela",
+    VG: "British Virgin Islands",
+    VN: "Vietnam",
+    VU: "Vanuatu",
+    WF: "Wallis & Futuna",
+    WS: "Samoa",
+    XK: "Kosovo",
+    YE: "Yemen",
+    YT: "Mayotte",
+    ZA: "South Africa",
+    ZM: "Zambia",
+    ZW: "Zimbabwe",
   }
+
+/** {@link CHECKOUT_SHIPPING_COUNTRY_NAMES}' codes, in order. */
+export const STRIPE_SHIPPING_COUNTRY_CODES: readonly string[] = Object.keys(
+  CHECKOUT_SHIPPING_COUNTRY_NAMES,
+)
+
+/**
+ * The countries ONE merchant's checkout collects an address for: the
+ * destinations their own zones name (international selling).
+ *
+ * `CHECKOUT_SHIPPING_COUNTRIES` used to be the only list, so a shopper in New
+ * Zealand, Ireland or any EU country but Germany and France could not enter an
+ * address at all, whatever zones the merchant saved. Now:
+ *
+ * - every country a zone names, in the order the merchant wrote them;
+ * - every Stripe-collectable country when a zone claims rest of world (`*`);
+ * - today's six for a merchant who prices no shipping (no zones and rates, or
+ *   pickup only), so a store that never set shipping up keeps the session it
+ *   has today, byte for byte.
+ *
+ * The AGL-1721 rule is unchanged, because `planCheckoutShipping` still pairs
+ * this list with the options it unions over it.
+ */
+export function checkoutShippingCountries(
+  settings: ShippingSettings | undefined,
+): readonly string[] {
+  if (!merchantPricesShipping(settings) || !settings?.zones?.length) {
+    return CHECKOUT_SHIPPING_COUNTRIES
+  }
+  const named: string[] = []
+  for (const zone of settings.zones) {
+    for (const raw of zone.countries ?? []) {
+      const code = String(raw).trim().toUpperCase()
+      if (code === '*') return STRIPE_SHIPPING_COUNTRY_CODES
+      if (code in CHECKOUT_SHIPPING_COUNTRY_NAMES && !named.includes(code)) {
+        named.push(code)
+      }
+    }
+  }
+  return named.length ? named : CHECKOUT_SHIPPING_COUNTRIES
+}
 
 /**
  * A destination a shopper declared, or `undefined` for anything this session
@@ -404,15 +678,14 @@ export const CHECKOUT_SHIPPING_COUNTRY_NAMES: Readonly<Record<string, string>> =
  */
 export function normalizeCheckoutShippingCountry(
   value: unknown,
+  countries: readonly string[] = STRIPE_SHIPPING_COUNTRY_CODES,
 ): string | undefined {
   // `typeof` rather than `String(value)`: a JSON body is caller-shaped, and
   // `String(['US'])` is 'US'. Coercing would let an array declare a
   // destination, which is not a spelling any storefront sends.
   if (typeof value !== 'string') return undefined
   const code = value.trim().toUpperCase()
-  return (CHECKOUT_SHIPPING_COUNTRIES as readonly string[]).includes(code)
-    ? code
-    : undefined
+  return countries.includes(code) ? code : undefined
 }
 
 export interface CheckoutShippingPlan {
@@ -525,8 +798,19 @@ export function planCheckoutShipping(
   cart: { subtotalCents: number; totalGrams?: number },
   destinationCountry?: unknown,
 ): CheckoutShippingPlan {
-  const countries = CHECKOUT_SHIPPING_COUNTRIES as readonly string[]
-  const destination = normalizeCheckoutShippingCountry(destinationCountry)
+  const countries = checkoutShippingCountries(settings)
+  // Any Stripe-collectable code counts as DECLARED, so a shopper naming a
+  // country this store's zones do not reach is told it is not served rather
+  // than asked again. Only a store whose list comes from its zones refuses
+  // that way: one on the fallback list ships nowhere in particular, and an
+  // outside code stays undeclared there exactly as it always was.
+  const declared = normalizeCheckoutShippingCountry(destinationCountry)
+  const fromZones = countries !== CHECKOUT_SHIPPING_COUNTRIES
+  if (declared && !countries.includes(declared) && fromZones) {
+    return { countries, options: [], refusal: 'destination-unserved' }
+  }
+  const destination =
+    declared && countries.includes(declared) ? declared : undefined
   if (destination) {
     const options = resolveCheckoutShippingOptions(
       settings,
@@ -609,6 +893,8 @@ const COVERAGE_PROBE_CART = { subtotalCents: 0, totalGrams: 0 }
 
 /** What a merchant's saved zones and rates cost their shoppers (AGL-1791). */
 export interface ShippingCoverage {
+  /** How many destinations checkout collects an address for. */
+  collectable: number
   /** Collectable destinations at least one rate reaches. */
   served: string[]
   /**
@@ -651,11 +937,9 @@ export interface ShippingCoverage {
  * Which of the collectable destinations a merchant's settings actually cover
  * (AGL-1791), for a console surface to show them.
  *
- * Measured against `CHECKOUT_SHIPPING_COUNTRIES` and nothing wider: those six
- * are the only destinations a storefront session collects an address for, so
- * they are the only ones a merchant can lose an order to. Counting coverage
- * against every country on earth would report a gap for destinations no
- * shopper can reach checkout from.
+ * Measured against `checkoutShippingCountries(settings)` and nothing wider:
+ * those are the only destinations this store's session collects an address
+ * for, so they are the only ones a merchant can lose an order to.
  *
  * Answered through `resolveCheckoutShippingOptions` — the same function the
  * session is built from — so a row the console allows but Stripe would reject
@@ -669,7 +953,8 @@ export function summarizeShippingCoverage(
   const served: string[] = []
   const unserved: string[] = []
   const offers = new Set<string>()
-  for (const country of CHECKOUT_SHIPPING_COUNTRIES) {
+  const collectable = checkoutShippingCountries(settings)
+  for (const country of collectable) {
     const options = resolveCheckoutShippingOptions(
       settings,
       [country],
@@ -684,6 +969,7 @@ export function summarizeShippingCoverage(
     ;(shippableOnly(options).length > 0 ? served : unserved).push(country)
   }
   return {
+    collectable: collectable.length,
     served,
     unserved: served.length > 0 ? unserved : [],
     shipsNowhere: served.length === 0,
@@ -711,8 +997,13 @@ export interface ShippingCoverageWords {
   asks: string
 }
 
-const coverageCountryNames = (codes: readonly string[]) =>
-  codes.map((code) => CHECKOUT_SHIPPING_COUNTRY_NAMES[code] ?? code).join(', ')
+/** Names, the first eight in full: a rest-of-world gap can be 200 countries. */
+const coverageCountryNames = (codes: readonly string[]) => {
+  const names = codes.map((code) => CHECKOUT_SHIPPING_COUNTRY_NAMES[code] ?? code)
+  return names.length > 8
+    ? `${names.slice(0, 8).join(', ')} and ${names.length - 8} more`
+    : names.join(', ')
+}
 
 export function describeShippingCoverage(
   coverage: ShippingCoverage,
@@ -722,7 +1013,7 @@ export function describeShippingCoverage(
     : ''
   if (coverage.unserved.length > 0) {
     return {
-      headline: `Checkout turns away ${coverage.unserved.length} of the ${CHECKOUT_SHIPPING_COUNTRIES.length} destinations it collects addresses for`,
+      headline: `Checkout turns away ${coverage.unserved.length} of the ${coverage.collectable} destinations it collects addresses for`,
       detail:
         `No rate reaches ${coverageCountryNames(coverage.unserved)}, so an order shipping there is refused rather than posted for free. ` +
         (coverage.offersLocalPickup
@@ -742,7 +1033,10 @@ export function describeShippingCoverage(
       ? coverage.offersLocalPickup
         ? 'No rate reaches any destination, so local pickup is the only delivery choice checkout offers. Nobody is turned away and no shipping is charged.'
         : 'No rate reaches any destination, so checkout charges no shipping and turns nobody away.'
-      : `Checkout can price shipping to every destination it collects an address for: ${coverageCountryNames(coverage.served)}.`,
+      : coverage.hasRestOfWorldZone &&
+          coverage.served.length === STRIPE_SHIPPING_COUNTRY_CODES.length
+        ? 'Checkout can price shipping to every country it can collect an address for.'
+        : `Checkout can price shipping to every destination it collects an address for: ${coverageCountryNames(coverage.served)}.`,
     asks,
   }
 }

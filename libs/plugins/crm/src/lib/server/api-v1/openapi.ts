@@ -378,10 +378,10 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
   activities: {
     tag: 'Activities',
     docsPage: 'activities',
-    description: 'Logged interactions. Append-only: no PATCH.',
+    description: 'Logged interactions. Append-only, except that a call or a meeting takes its recording and transcript afterwards (PATCH).',
     schemaName: 'Activity',
     required: ['id', 'object', 'kind', 'at'],
-    writable: ['kind', 'body', 'at', 'byUid', 'contactId', 'companyId', 'dealId', 'outcome', 'durationMinutes', 'direction', 'consentSiteId'],
+    writable: ['kind', 'body', 'at', 'byUid', 'contactId', 'companyId', 'dealId', 'outcome', 'durationMinutes', 'direction', 'mediaIds', 'transcript', 'consentSiteId'],
     writeOnly: {
       consentSiteId: stringField('The site the activity is logged on behalf of.'),
     },
@@ -399,6 +399,8 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       outcome: nullableField(stringField('Outcome label.')),
       durationMinutes: nullableField(integerField('Duration, for calls and meetings.')),
       direction: nullableField(stringField('Which way it went: `inbound`, `outbound` or `internal` for a call, `inbound` or `outbound` for an email.')),
+      mediaIds: stringListField('A call’s or a meeting’s recordings: media library files by id, at most 5. Upload the audio first with Upload a file to the media library (`private: true`, `purpose: "callRecording"`).'),
+      transcript: nullableField(stringField('What was said, as text, for a call or a meeting; at most 200,000 characters. Searchable with the body.')),
       siteId: nullableField(stringField('Site the record originated on.')),
       ...RECORD_STAMPS,
     },
@@ -406,8 +408,30 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       { path: '/v1/activities', method: 'get', operationId: 'listActivities', summary: 'List activities', description: 'Lists the calls, emails, meetings and notes logged in the CRM. Filter by kind, contact or deal.', list: true, returns: 'Activity', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, queryParam('kind', 'Activity kind.'), queryParam('contactId', 'Associated contact.'), queryParam('dealId', 'Associated deal.')] },
       { path: '/v1/activities', method: 'post', operationId: 'createActivity', summary: 'Log an activity', description: 'Records a call, email, meeting or note against a contact, company or deal. Needs the activity’s text in `body`. Returns the logged activity. Logging an email records it; it does not send one.', accepts: 'ActivityWrite', returns: 'Activity', entitlement: 'crm', creates: true },
       { path: '/v1/activities/{activityId}', method: 'get', operationId: 'getActivity', summary: 'Get an activity', description: 'Returns one logged activity. Needs `activityId` from List activities.', returns: 'Activity', entitlement: 'crm', pathParams: [{ name: 'activityId', description: 'Activity id.' }] },
+      { path: '/v1/activities/{activityId}', method: 'patch', operationId: 'updateActivity', summary: 'Attach a recording or transcript to an activity', description: 'Attaches a call’s or a meeting’s recording (`mediaIds`) and its `transcript` after it was logged; nothing else about the activity changes, and `null` or `[]` removes them. Needs `activityId` from List activities. Upload the audio first with Upload a file to the media library. Returns the activity.', accepts: 'ActivityRecordingWrite', returns: 'Activity', entitlement: 'crm', pathParams: [{ name: 'activityId', description: 'Activity id.' }] },
       { path: '/v1/activities/{activityId}', method: 'delete', operationId: 'deleteActivity', summary: 'Delete an activity', description: 'Deletes a logged activity permanently. Needs `activityId` from List activities.', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'activityId', description: 'Activity id.' }] },
     ],
+    components: {
+      ActivityRecordingWrite: {
+        type: 'object',
+        description:
+          'What a call or a meeting takes after it was logged. Any other member is a `400`.',
+        properties: {
+          mediaIds: {
+            type: ['array', 'null'],
+            items: { type: 'string' },
+            maxItems: 5,
+            description: 'Media library files by id, at most 5. `null` or `[]` removes them.',
+          },
+          transcript: {
+            type: ['string', 'null'],
+            maxLength: 200000,
+            description: 'What was said, as text. `null` or an empty string removes it.',
+          },
+        },
+        additionalProperties: false,
+      },
+    },
   },
   leads: {
     tag: 'Leads',

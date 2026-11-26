@@ -4497,6 +4497,7 @@ internal data class ContractValuesPart8(
     @SerialName("STARRED_FIELD") val starredField: String,
     @SerialName("STARRED_MAX") val starredMax: Long,
     @SerialName("STAY_CHECK_IN_MODES") val stayCheckInModes: List<StayCheckInMode>,
+    @SerialName("STRIPE_SHIPPING_COUNTRY_CODES") val stripeShippingCountryCodes: List<String>,
     @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,
     @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
     @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
@@ -4517,11 +4518,11 @@ internal data class ContractValuesPart8(
     @SerialName("THEME_CONSOLE_FIELDS") val themeConsoleFields: List<String>,
     @SerialName("THEME_DARK_RAIL_SEEDS") val themeDarkRailSeeds: Map<String, String>,
     @SerialName("THEME_DENSITIES") val themeDensities: List<ThemeDensity>,
-    @SerialName("THEME_FIGMA_BASE") val themeFigmaBase: ThemeColorsPair,
 )
 
 @Serializable
 internal data class ContractValuesPart9(
+    @SerialName("THEME_FIGMA_BASE") val themeFigmaBase: ThemeColorsPair,
     @SerialName("THEME_NON_TEXT_CONTRAST") val themeNonTextContrast: Long,
     @SerialName("THEME_PALETTES") val themePalettes: List<ThemePalette>,
     @SerialName("THEME_PHONE_AGLYN") val themePhoneAglyn: ThemeColorsPair,
@@ -4917,6 +4918,7 @@ class ContractValues internal constructor(
     val starredField: String get() = part8.starredField
     val starredMax: Long get() = part8.starredMax
     val stayCheckInModes: List<StayCheckInMode> get() = part8.stayCheckInModes
+    val stripeShippingCountryCodes: List<String> get() = part8.stripeShippingCountryCodes
     val submissionFilterHeaders: Map<String, String> get() = part8.submissionFilterHeaders
     val submissionListQuery: ListQueryDeclaration get() = part8.submissionListQuery
     val submissionReadOptions: List<ListFilterOption> get() = part8.submissionReadOptions
@@ -4937,7 +4939,7 @@ class ContractValues internal constructor(
     val themeConsoleFields: List<String> get() = part8.themeConsoleFields
     val themeDarkRailSeeds: Map<String, String> get() = part8.themeDarkRailSeeds
     val themeDensities: List<ThemeDensity> get() = part8.themeDensities
-    val themeFigmaBase: ThemeColorsPair get() = part8.themeFigmaBase
+    val themeFigmaBase: ThemeColorsPair get() = part9.themeFigmaBase
     val themeNonTextContrast: Long get() = part9.themeNonTextContrast
     val themePalettes: List<ThemePalette> get() = part9.themePalettes
     val themePhoneAglyn: ThemeColorsPair get() = part9.themePhoneAglyn

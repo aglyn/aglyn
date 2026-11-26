@@ -944,7 +944,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         error: CARRIER_POSTAL_CODE_MESSAGE,
         needsShippingCountry: true,
         needsShippingPostalCode: true,
-        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+        shippingCountries: [...CommerceModel.checkoutShippingCountries(shippingSettings)],
       })
     }
     if (shippingPlan.refusal === 'destination-required') {
@@ -957,7 +957,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       return res.status(400).json({
         error: 'Choose where you’re shipping to.',
         needsShippingCountry: true,
-        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+        shippingCountries: [...CommerceModel.checkoutShippingCountries(shippingSettings)],
       })
     }
     if (shippingPlan.refusal === 'destination-unserved') {
@@ -973,7 +973,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           'that country'
         }.`,
         needsShippingCountry: true,
-        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+        shippingCountries: [...CommerceModel.checkoutShippingCountries(shippingSettings)],
       })
     }
     // The merchant priced shipping and no rate of theirs reaches this cart
@@ -1109,6 +1109,10 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       'line_items[0][price_data][currency]': 'usd',
       'line_items[0][price_data][unit_amount]': String(chargedUnitAmountCents),
       'line_items[0][price_data][product_data][name]': chargedLineName,
+      // A long set of choices is cut from the name at 120; the description carries all of them.
+      ...(lineLabel && chargedLineName.length >= 120
+        ? { 'line_items[0][price_data][product_data][description]': lineLabel.slice(0, 500) }
+        : {}),
       ...(isSubscription
         ? {
             'line_items[0][price_data][recurring][interval]':

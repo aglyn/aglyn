@@ -125,8 +125,51 @@ export interface PickMediaOptions {
  * Absent (undefined `pickMedia`) when no provider is mounted, so callers
  * fall back to a plain URL input.
  */
+export {
+  CALL_RECORDING_CONSENT_REQUIRED,
+  CALL_RECORDING_CONSENT_STATEMENT,
+  type MediaUploadPurpose,
+} from './call-recordings'
+import type { MediaUploadPurpose } from './call-recordings'
+
+/** How a caller wants a file uploaded without opening the library. */
+export interface UploadMediaOptions {
+  /**
+   * The folder it lands in, by name from the library's root, created level
+   * by level when missing — `['CRM', 'Calls']`. Every upload goes into a
+   * folder.
+   */
+  folderPath: readonly string[]
+  /** Store it private: no public link, played through a signed one. */
+  private?: boolean
+  /** See {@link MediaUploadPurpose}. */
+  purpose?: MediaUploadPurpose
+  /**
+   * The uploader confirmed the purpose's statement — for `callRecording`,
+   * {@link CALL_RECORDING_CONSENT_STATEMENT}, asked only while
+   * {@link CALL_RECORDING_CONSENT_REQUIRED} is on.
+   */
+  confirmed?: boolean
+  /** Only this kind of file is taken; another is refused before any bytes move. */
+  kind?: MediaPickerKind
+}
+
+/** Why an upload did not happen, in words for the person who asked. */
+export class MediaUploadError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'MediaUploadError'
+  }
+}
+
 export interface MediaPickerContextValue {
   pickMedia?: (options?: PickMediaOptions) => Promise<PickedMedia | null>
+  /**
+   * Uploads one file to the organization's library and hands it back as a
+   * picked asset, or throws a {@link MediaUploadError} saying why not.
+   * Absent where no console provider is mounted.
+   */
+  uploadMedia?: (file: File, options: UploadMediaOptions) => Promise<PickedMedia>
 }
 
 export const MediaPickerContext = createContext<MediaPickerContextValue>({})

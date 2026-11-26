@@ -1322,6 +1322,63 @@ export interface CrmActivity extends CrmScoped {
   messageId?: string
   inReplyTo?: string
   threadSubject?: string
+  /**
+   * The recordings of a call or a meeting: organization-library media ids,
+   * resolved at read time like a record's files — see
+   * {@link normalizeCrmActivityMediaIds}. Absent on an entry with none.
+   */
+  mediaIds?: string[]
+  /**
+   * What was said, as text: pasted, or read from a `.txt` a phone's
+   * speech-to-text produced. Searchable with the body. Never written by an
+   * AI on its own — see {@link CRM_ACTIVITY_TRANSCRIPT_MAX}.
+   */
+  transcript?: string
+}
+
+/*==========================================
+ * CALL RECORDINGS ON AN ACTIVITY
+ *=========================================*/
+
+/**
+ * The most recordings one activity carries. A call is one file, and a long
+ * meeting a few parts; anything else belongs in the record's own Files.
+ */
+export const CRM_ACTIVITY_MEDIA_IDS_MAX = 5
+
+/**
+ * The longest transcript an activity stores, in characters.
+ *
+ * An hour of conversation is roughly 60,000 characters of text, so this
+ * holds a long meeting with room to spare while keeping the document well
+ * inside Firestore's 1 MiB.
+ */
+export const CRM_ACTIVITY_TRANSCRIPT_MAX = 200_000
+
+/**
+ * Where a recording uploaded from an activity lands in the organization's
+ * library: one folder per level, created when missing. Every upload goes
+ * into a folder, and a workspace looking for its calls finds them together.
+ */
+export const CRM_CALL_RECORDINGS_FOLDER_PATH: readonly string[] = ['CRM', 'Calls']
+
+/** The kinds that can carry a recording: a call, and a meeting. */
+export const CRM_ACTIVITY_RECORDING_KINDS: readonly CrmActivityKind[] = ['call', 'meeting']
+
+/** Whether an activity of this kind can carry a recording and a transcript. */
+export function activityKindTakesRecording(kind: unknown): boolean {
+  return (CRM_ACTIVITY_RECORDING_KINDS as readonly unknown[]).includes(kind)
+}
+
+/** An activity's recording ids, cleaned the way a record's files are, and capped. */
+export function normalizeCrmActivityMediaIds(value: unknown): string[] {
+  return normalizeCrmMediaIds(value).slice(0, CRM_ACTIVITY_MEDIA_IDS_MAX)
+}
+
+/** A transcript as stored: line endings made one kind, trimmed, capped. */
+export function normalizeCrmActivityTranscript(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  return value.replace(/\r\n?/g, '\n').trim().slice(0, CRM_ACTIVITY_TRANSCRIPT_MAX)
 }
 
 /** An activity as a listener hands it back: the document plus its id. */

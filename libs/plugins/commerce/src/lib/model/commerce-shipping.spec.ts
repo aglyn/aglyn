@@ -17,6 +17,8 @@
 
 import {
   CHECKOUT_SHIPPING_COUNTRIES,
+  STRIPE_SHIPPING_COUNTRY_CODES,
+  checkoutShippingCountries,
   MAX_CHECKOUT_SHIPPING_OPTIONS,
   merchantPricesShipping,
   normalizeCheckoutShippingCountry,
@@ -320,7 +322,10 @@ describe('planCheckoutShipping', () => {
     }
     const wide = planCheckoutShipping(worldOnly, cart)
     expect(wide.refusal).toBeUndefined()
-    expect(wide.countries).toEqual([...CHECKOUT_SHIPPING_COUNTRIES])
+    // Rest of world opens checkout to every country Stripe can collect an
+    // address for, New Zealand and Ireland included.
+    expect(wide.countries).toEqual([...STRIPE_SHIPPING_COUNTRY_CODES])
+    expect(wide.countries).toEqual(expect.arrayContaining(['NZ', 'IE', 'NL']))
     expect(wide.options.map((option) => option.rateId)).toEqual(['flat'])
     expect(everyOptionServesEveryCountry(worldOnly, wide)).toBe(true)
 
@@ -361,7 +366,7 @@ describe('planCheckoutShipping', () => {
     // at Stripe either, so it falls through to the ambiguity question rather
     // than to a session narrowed to somewhere unreachable.
     for (const value of [
-      'JP',
+      'ZZ',
       '',
       '  ',
       'USA',
@@ -459,8 +464,9 @@ describe('local pickup does not widen where a store ships (AGL-2325)', () => {
       expect(plan.refusal).toBe('destination-unserved')
       expect(plan.options).toEqual([])
       // The refusal must not narrow the session to the country it refused —
-      // the shopper is being handed the country select back.
-      expect(plan.countries).toEqual([...CHECKOUT_SHIPPING_COUNTRIES])
+      // the shopper is being handed the country select back, holding only
+      // the countries the store's zones name.
+      expect(plan.countries).toEqual(['US'])
     }
   })
 
@@ -531,7 +537,7 @@ describe('summarizeShippingCoverage', () => {
   /** Every destination named as refused is one the checkout refuses. */
   function refusalsAgree(settings: ShippingSettings | undefined) {
     const coverage = summarizeShippingCoverage(settings)
-    return CHECKOUT_SHIPPING_COUNTRIES.every((country) => {
+    return checkoutShippingCountries(settings).every((country) => {
       const refused =
         planCheckoutShipping(settings, cart, country).refusal ===
         'destination-unserved'
@@ -540,17 +546,21 @@ describe('summarizeShippingCoverage', () => {
   }
 
   it('names the destinations no rate reaches', () => {
-    // A US zone and nothing else: the four the merchant priced no rate for
-    // are the four AGL-1721 now turns away at checkout.
+    // Checkout collects the countries the zones name, so the gap is a zone
+    // whose rates reach nobody: New Zealand is named and priced nothing.
     const usOnly: ShippingSettings = {
-      zones: [{ id: 'us', name: 'US', countries: ['US', 'CA'] }],
+      zones: [
+        { id: 'us', name: 'US', countries: ['US', 'CA'] },
+        { id: 'nz', name: 'New Zealand', countries: ['NZ'] },
+      ],
       rates: [
         { id: 'std', zoneId: 'us', name: 'Standard', kind: 'flat', amountCents: 799 },
       ],
     }
     const coverage = summarizeShippingCoverage(usOnly)
+    expect(coverage.collectable).toBe(3)
     expect(coverage.served).toEqual(['US', 'CA'])
-    expect(coverage.unserved).toEqual(['GB', 'AU', 'DE', 'FR'])
+    expect(coverage.unserved).toEqual(['NZ'])
     expect(coverage.shipsNowhere).toBe(false)
     expect(coverage.hasRestOfWorldZone).toBe(false)
     expect(refusalsAgree(usOnly)).toBe(true)
@@ -582,7 +592,7 @@ describe('summarizeShippingCoverage', () => {
       ],
     }
     const coverage = summarizeShippingCoverage(world)
-    expect(coverage.served).toEqual([...CHECKOUT_SHIPPING_COUNTRIES])
+    expect(coverage.served).toEqual([...STRIPE_SHIPPING_COUNTRY_CODES])
     expect(coverage.unserved).toEqual([])
     expect(coverage.asksDestination).toBe(false)
     expect(coverage.hasRestOfWorldZone).toBe(true)
@@ -621,18 +631,18 @@ describe('summarizeShippingCoverage', () => {
     for (const localPickup of [false, true]) {
       const coverage = summarizeShippingCoverage({ ...usOnly, localPickup })
       expect(coverage.served).toEqual(['US'])
-      expect(coverage.unserved).toEqual(['CA', 'GB', 'AU', 'DE', 'FR'])
+      // A US-only store collects only US addresses, so nothing is refused.
+      expect(coverage.unserved).toEqual([])
       expect(coverage.shipsNowhere).toBe(false)
       expect(coverage.offersLocalPickup).toBe(localPickup)
       expect(refusalsAgree({ ...usOnly, localPickup })).toBe(true)
     }
-    // And pickup IS the thing that makes checkout ask where the parcel is
-    // going, because it changes what US is offered relative to the rest.
-    expect(summarizeShippingCoverage(usOnly).asksDestination).toBe(true)
+    // With one collectable country there is nothing to ask the shopper.
+    expect(summarizeShippingCoverage(usOnly).asksDestination).toBe(false)
     expect(
       summarizeShippingCoverage({ ...usOnly, localPickup: true })
         .asksDestination,
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it('sees a specific zone with no rates hide the rest-of-world zone', () => {
@@ -670,7 +680,9 @@ describe('summarizeShippingCoverage', () => {
     }
     const coverage = summarizeShippingCoverage(blank)
     expect(coverage.served).toEqual(['US'])
-    expect(coverage.unserved).toEqual(['CA', 'GB', 'AU', 'DE', 'FR'])
+    expect(coverage.unserved).toEqual(
+      STRIPE_SHIPPING_COUNTRY_CODES.filter((code) => code !== 'US'),
+    )
     expect(refusalsAgree(blank)).toBe(true)
   })
 
@@ -890,3 +902,64 @@ describe('reading a zone that was not written by the console (AGL-2298)', () => 
   })
 })
 
+
+describe('checkoutShippingCountries (international selling)', () => {
+  const rate = (zoneId: string) => ({
+    id: `r-${zoneId}`,
+    zoneId,
+    name: 'Standard',
+    kind: 'flat' as const,
+    amountCents: 1500,
+  })
+
+  it('collects an address in every country the zones name', () => {
+    const settings: ShippingSettings = {
+      zones: [
+        { id: 'us', name: 'US', countries: ['US'] },
+        { id: 'anz', name: 'Australia & NZ', countries: ['au', 'NZ'] },
+        { id: 'eu', name: 'Europe', countries: ['IE', 'NL', 'XX', 'AU'] },
+      ],
+      rates: [rate('us'), rate('anz'), rate('eu')],
+    }
+    expect(checkoutShippingCountries(settings)).toEqual([
+      'US',
+      'AU',
+      'NZ',
+      'IE',
+      'NL',
+    ])
+    const nz = planCheckoutShipping(settings, { subtotalCents: 9000 }, 'NZ')
+    expect(nz.refusal).toBeUndefined()
+    expect(nz.countries).toEqual(['NZ'])
+    expect(nz.options.map((option) => option.rateId)).toEqual(['r-anz'])
+  })
+
+  it('refuses a real country the zones do not name, and keeps the list', () => {
+    const settings: ShippingSettings = {
+      zones: [{ id: 'nz', name: 'NZ', countries: ['NZ'] }],
+      rates: [rate('nz')],
+    }
+    expect(planCheckoutShipping(settings, { subtotalCents: 100 }, 'JP')).toEqual({
+      countries: ['NZ'],
+      options: [],
+      refusal: 'destination-unserved',
+    })
+  })
+
+  it('keeps today\'s six for a store that prices no shipping', () => {
+    for (const settings of [
+      undefined,
+      {},
+      { localPickup: true },
+      { zones: [{ id: 'nz', name: 'NZ', countries: ['NZ'] }] },
+    ] as (ShippingSettings | undefined)[]) {
+      expect(checkoutShippingCountries(settings)).toBe(
+        CHECKOUT_SHIPPING_COUNTRIES,
+      )
+      // An outside country stays undeclared there, never refused.
+      expect(
+        planCheckoutShipping(settings, { subtotalCents: 100 }, 'NZ').refusal,
+      ).toBeUndefined()
+    }
+  })
+})

@@ -1,5 +1,6 @@
 package com.aglyn.screens
 
+import com.aglyn.contracts.Contracts
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -11,19 +12,43 @@ import kotlinx.serialization.json.put
 
 /**
  * What a store's saved shipping zones and rates cover, as the console's Shipping card says it (`summarizeShippingCoverage`
- * in `commerce-shipping.ts`): which of the six destinations checkout collects an address for are reached by at least one
+ * in `commerce-shipping.ts`): which of the destinations checkout collects an address for are reached by at least one
  * rate, which it turns away, and whether the shopper is asked where the parcel is going. A port of the console's resolver
  * (zones, the four priced rate kinds, local pickup, the five-option cap) replayed from `function-cases.generated.json`, so a
  * change to the TypeScript fails there until this follows.
  */
 internal object ShippingCoverage {
-  /** The destinations a storefront session collects an address for, in the order the console lists them. */
-  val countries = listOf("US", "CA", "GB", "AU", "DE", "FR")
+  /** The destinations a session collects an address for when the store prices no shipping (`CHECKOUT_SHIPPING_COUNTRIES`). */
+  val fallbackCountries = listOf("US", "CA", "GB", "AU", "DE", "FR")
 
-  /** Shopper-facing names for those destinations. */
-  val names = mapOf(
-    "US" to "United States", "CA" to "Canada", "GB" to "United Kingdom", "AU" to "Australia", "DE" to "Germany", "FR" to "France",
-  )
+  /** Shopper-facing names for every country checkout can collect an address for. */
+  val names: Map<String, String> get() = Contracts.checkoutShippingCountryNames
+
+  /** Whether the store prices shipping at all: local pickup, or a rate bound to a zone that exists (`merchantPricesShipping`). */
+  private fun pricesShipping(settings: JsonElement?): Boolean {
+    if (settings == null || settings is JsonNull) return false
+    if (ScreenValues.truthy(field(settings, "localPickup"))) return true
+    val zoneIds = list(field(settings, "zones")).map { text(field(it, "id")).orEmpty() }.toSet()
+    return list(field(settings, "rates")).any { text(field(it, "zoneId")).orEmpty() in zoneIds }
+  }
+
+  /**
+   * The countries THIS store's checkout collects an address for (`checkoutShippingCountries`): the ones its zones name,
+   * every country for a rest-of-world zone, and the six above for a store that prices no shipping.
+   */
+  fun countries(settings: JsonElement?): List<String> {
+    val zones = list(field(settings, "zones"))
+    if (!pricesShipping(settings) || zones.isEmpty()) return fallbackCountries
+    val named = mutableListOf<String>()
+    for (zone in zones) {
+      for (value in codes(zone)) {
+        val code = zoneCode(value)
+        if (code == "*") return Contracts.stripeShippingCountryCodes
+        if (names.containsKey(code) && code !in named) named += code
+      }
+    }
+    return named.ifEmpty { fallbackCountries }
+  }
 
   /** Stripe shows a session at most this many shipping options. */
   const val MAX_OPTIONS = 5
@@ -131,6 +156,7 @@ internal object ShippingCoverage {
 
   /** What a store's settings reach (`summarizeShippingCoverage`). */
   data class Coverage(
+    val collectable: Int,
     val served: List<String>,
     val unserved: List<String>,
     val shipsNowhere: Boolean,
@@ -143,7 +169,8 @@ internal object ShippingCoverage {
     val served = mutableListOf<String>()
     val unserved = mutableListOf<String>()
     val offers = mutableSetOf<String>()
-    for (country in countries) {
+    val collectable = countries(settings)
+    for (country in collectable) {
       val options = checkoutOptions(settings, listOf(country))
       offers += key(options)
       // Asked of the shippable list: local pickup is a collection choice, not a rate, so it never counts as coverage.
@@ -151,6 +178,7 @@ internal object ShippingCoverage {
     }
     val zones = list(field(settings, "zones"))
     return Coverage(
+      collectable = collectable.size,
       served = served,
       unserved = if (served.isEmpty()) emptyList() else unserved,
       shipsNowhere = served.isEmpty(),
@@ -160,7 +188,11 @@ internal object ShippingCoverage {
     )
   }
 
-  private fun named(codes: List<String>) = codes.joinToString(", ") { names[it] ?: it }
+  /** Names, the first eight in full: a rest-of-world gap can be 200 countries. */
+  private fun named(codes: List<String>): String {
+    val all = codes.map { names[it] ?: it }
+    return if (all.size > 8) all.take(8).joinToString(", ") + " and ${all.size - 8} more" else all.joinToString(", ")
+  }
 
   data class Words(val headline: String, val detail: String, val note: String, val asks: String)
 
@@ -169,7 +201,7 @@ internal object ShippingCoverage {
     val asks = if (coverage.asksDestination) "Rates differ by destination, so checkout asks the shopper where the parcel is going before it can price one." else ""
     if (coverage.unserved.isNotEmpty()) {
       return Words(
-        headline = "Checkout turns away ${coverage.unserved.size} of the ${countries.size} destinations it collects addresses for",
+        headline = "Checkout turns away ${coverage.unserved.size} of the ${coverage.collectable} destinations it collects addresses for",
         detail = "No rate reaches ${named(coverage.unserved)}, so an order shipping there is refused rather than posted for free. " +
           (if (coverage.offersLocalPickup) "Local pickup does not cover them: it is a collection choice, not a rate, so it is offered where checkout completes and closes no gap here. " else "") +
           (
@@ -184,6 +216,8 @@ internal object ShippingCoverage {
       coverage.shipsNowhere && coverage.offersLocalPickup ->
         "No rate reaches any destination, so local pickup is the only delivery choice checkout offers. Nobody is turned away and no shipping is charged."
       coverage.shipsNowhere -> "No rate reaches any destination, so checkout charges no shipping and turns nobody away."
+      coverage.hasRestOfWorldZone && coverage.served.size == Contracts.stripeShippingCountryCodes.size ->
+        "Checkout can price shipping to every country it can collect an address for."
       else -> "Checkout can price shipping to every destination it collects an address for: ${named(coverage.served)}."
     }
     return Words("", "", note, asks)
@@ -203,7 +237,7 @@ internal object ShippingCoverage {
       put("servedNames", named(coverage.served))
       put("unservedNames", named(coverage.unserved))
       put("unservedCount", coverage.unserved.size)
-      put("countryCount", countries.size)
+      put("countryCount", coverage.collectable)
       put("shipsNowhere", coverage.shipsNowhere)
       put("asksDestination", coverage.asksDestination)
       put("offersLocalPickup", coverage.offersLocalPickup)

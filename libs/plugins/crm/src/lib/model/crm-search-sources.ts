@@ -167,7 +167,7 @@ export const CRM_SEARCH_SOURCES: readonly ConsoleSearchSource[] = [
     collection: CRM_COLLECTIONS.activities,
     nameField: 'subject',
     fallbackNameField: 'body',
-    extraFields: ['body', 'outcome'],
+    extraFields: ['body', 'outcome', 'transcript'],
     order: 45,
     href: (row, context) => workHref('activity', row, context),
   },

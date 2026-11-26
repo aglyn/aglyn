@@ -52,6 +52,7 @@ import {
   resolveCrmActivityCompany,
 } from '../model/crm-activity-link'
 import { ActivityLinkFields } from './activity-link-fields'
+import { ActivityRecordingFields } from './activity-recording'
 import type { ActivityRecordLink, ActivityScope } from './activity-queries'
 import { CrmSitePicker } from './crm-site-picker'
 
@@ -98,6 +99,10 @@ interface Draft {
   direction: string
   /** **Name** and **Related To**, as the reader has left them. */
   picks: CrmActivityPicks
+  /** A call's or a meeting's recordings, as library media ids. */
+  mediaIds: string[]
+  /** What was said, pasted or loaded from a `.txt`. */
+  transcript: string
 }
 
 /** The kind a new activity opens on when the caller names none. */
@@ -115,6 +120,8 @@ const freshDraft = (
   // Most logged calls and emails are the team's own.
   direction: 'outbound',
   picks,
+  mediaIds: [],
+  transcript: '',
 })
 
 const draftFrom = (activity: CrmActivityRow): Draft => ({
@@ -128,6 +135,8 @@ const draftFrom = (activity: CrmActivityRow): Draft => ({
       : '',
   direction: Aglyn.crmActivityDirection(activity.kind, activity.direction) ?? '',
   picks: crmActivityPicksFrom(activity),
+  mediaIds: Aglyn.normalizeCrmActivityMediaIds(activity.mediaIds),
+  transcript: typeof activity.transcript === 'string' ? activity.transcript : '',
 })
 
 export interface LogActivityDialogProps {
@@ -212,6 +221,8 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
   const { enqueueSnackbar } = useSnackbar()
   const [draft, setDraft] = useState<Draft>(freshDraft)
   const [saving, setSaving] = useState(false)
+  // A recording still uploading: saving now would file the call without it.
+  const [uploading, setUploading] = useState(false)
 
   /*
    * Seeded on OPEN, not on mount: the dialog stays mounted between uses so
@@ -236,6 +247,7 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
   }, [open, activity, presetKind])
 
   const hasOutcome = Aglyn.activityKindHasOutcome(draft.kind)
+  const takesRecording = Aglyn.activityKindTakesRecording(draft.kind)
   const directions = Aglyn.CRM_ACTIVITY_DIRECTIONS[draft.kind] ?? []
   const direction = Aglyn.crmActivityDirection(draft.kind, draft.direction)
   const atMs = fromLocalInput(draft.at)
@@ -270,6 +282,7 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
     atMs !== null &&
     durationValid &&
     linked &&
+    !uploading &&
     !saving
 
   const handleSave = useCallback(async () => {
@@ -295,6 +308,10 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
       }
       const outcome = hasOutcome ? draft.outcome.trim().slice(0, OUTCOME_MAX) : ''
       const durationMinutes = hasOutcome && duration !== null ? duration : null
+      // Only a call or a meeting keeps a recording; one turned into a note
+      // lets it go, and the file stays in the library where it was filed.
+      const mediaIds = takesRecording ? Aglyn.normalizeCrmActivityMediaIds(draft.mediaIds) : []
+      const transcript = takesRecording ? Aglyn.normalizeCrmActivityTranscript(draft.transcript) : ''
       if (activity) {
         const relinked = crmActivityPicksEqual(picks, crmActivityPicksFrom(activity))
           ? null
@@ -324,6 +341,8 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
             direction: direction ?? deleteField(),
             durationMinutes:
               durationMinutes !== null ? durationMinutes : deleteField(),
+            mediaIds: mediaIds.length ? mediaIds : deleteField(),
+            transcript: transcript ? transcript : deleteField(),
             updatedAt: new Date(),
           },
         )
@@ -374,6 +393,8 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
             ...(outcome ? { outcome } : {}),
             ...(durationMinutes !== null ? { durationMinutes } : {}),
             ...(direction ? { direction } : {}),
+            ...(mediaIds.length ? { mediaIds } : {}),
+            ...(transcript ? { transcript } : {}),
             // Only the links it has: `stampCrmActivityCompany` leaves no blank
             // key, and Firestore refuses `undefined`.
             ...links,
@@ -410,6 +431,9 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
     durationValid,
     draft.kind,
     draft.outcome,
+    draft.mediaIds,
+    draft.transcript,
+    takesRecording,
     direction,
     hasOutcome,
     duration,
@@ -544,6 +568,18 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
               sx={{ width: 120 }}
             />
           </Stack>
+        ) : null}
+        {takesRecording ? (
+          <ActivityRecordingFields
+            firestore={firestore}
+            orgId={scope.orgId}
+            mediaIds={draft.mediaIds}
+            onMediaIdsChange={(next) => setDraft((prev) => ({ ...prev, mediaIds: next }))}
+            transcript={draft.transcript}
+            onTranscriptChange={(next) => setDraft((prev) => ({ ...prev, transcript: next }))}
+            disabled={saving}
+            onBusyChange={setUploading}
+          />
         ) : null}
         {leadOnly ? null : (
           <ActivityLinkFields

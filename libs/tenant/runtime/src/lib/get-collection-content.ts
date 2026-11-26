@@ -793,7 +793,7 @@ interface LiveEntriesRead {
  * that grows with how much people have written.
  *
  * Site search is unaffected and must stay that way: it matches on `body`
- * through its OWN query in `apps/tenant/utils/search-content.ts`, which this
+ * through its OWN query in `libs/tenant/runtime/src/lib/site-search.ts`, which this
  * mask does not touch.
  *
  * ⛔ A reader added to `mapEntryFields` or to the liveness/schedule helpers
