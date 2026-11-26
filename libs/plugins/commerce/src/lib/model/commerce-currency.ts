@@ -78,7 +78,7 @@ export type FixedPrices = Record<string, number>
 /**
  * The currencies a store may sell in: the ones the European Central Bank
  * publishes a daily reference rate for, that Stripe charges cards in, and
- * that settle without Stripe's special-case rounding rules.
+ * that have two decimal places (every receipt and report formats cents).
  */
 export const SELLABLE_CURRENCIES: readonly string[] = [
   'USD',
@@ -87,7 +87,6 @@ export const SELLABLE_CURRENCIES: readonly string[] = [
   'AUD',
   'NZD',
   'CAD',
-  'JPY',
   'CHF',
   'SEK',
   'NOK',
@@ -105,7 +104,6 @@ export const SELLABLE_CURRENCIES: readonly string[] = [
   'THB',
   'MYR',
   'IDR',
-  'KRW',
   'RON',
   'TRY',
   'CNY',
@@ -396,6 +394,78 @@ export function formatShopperMoney(
 export function currenciesShareSign(codes: readonly string[]): boolean {
   const dollars = codes.filter((code) => ['USD', 'AUD', 'NZD', 'CAD', 'SGD', 'HKD', 'MXN'].includes(code))
   return dollars.length > 1
+}
+
+/**
+ * Money in a timeline line or notice for a sale in `currency` (lower or
+ * upper case). A USD sale keeps the exact text it always had (`$1234.50`);
+ * any other currency names itself (`NZ$449.00`).
+ */
+export function saleMoneyText(cents: number, currency: string | null | undefined): string {
+  const code = upper(currency) || 'USD'
+  if (code === 'USD') return `$${((Number(cents) || 0) / 100).toFixed(2)}`
+  return formatShopperMoney(cents, code)
+}
+
+/** The metadata keys a checkout writes the charged line units under (AGL-4248). */
+export const CHARGE_UNITS_METADATA_PREFIX = 'chargeUnits'
+
+/** Line units as metadata entries, each under Stripe's 500-character value cap. */
+export function encodeChargeUnitsMetadata(units: readonly number[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  let chunk: string[] = []
+  let index = 0
+  const flush = () => {
+    if (chunk.length) out[`${CHARGE_UNITS_METADATA_PREFIX}${index++}`] = chunk.join(',')
+    chunk = []
+  }
+  for (const unit of units) {
+    const text = String(Math.max(0, Math.round(unit)))
+    if ([...chunk, text].join(',').length > 480) flush()
+    chunk.push(text)
+  }
+  flush()
+  return out
+}
+
+/** The line units back from session metadata, or undefined when absent. */
+export function decodeChargeUnitsMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+): number[] | undefined {
+  if (!metadata) return undefined
+  const units: number[] = []
+  for (let index = 0; typeof metadata[`${CHARGE_UNITS_METADATA_PREFIX}${index}`] === 'string'; index++) {
+    for (const part of String(metadata[`${CHARGE_UNITS_METADATA_PREFIX}${index}`]).split(',')) {
+      const n = Number(part)
+      units.push(Number.isFinite(n) ? n : 0)
+    }
+  }
+  return units.length ? units : undefined
+}
+
+/**
+ * The order's currency fields (AGL-4248) from a paid session: the charge
+ * currency Stripe reports and, when it is not the store's, the store
+ * currency, the rate and the totals there.
+ */
+export function orderCurrencyFields<T extends object>(
+  session: { currency?: unknown; metadata?: Record<string, unknown> | null } | null | undefined,
+  totals: T,
+): { currency?: string; baseCurrency?: string; fxRate?: number; baseTotals?: T } {
+  const currency = typeof session?.currency === 'string' ? session.currency.toLowerCase() : undefined
+  const meta = session?.metadata ?? {}
+  const base = typeof meta['baseCurrency'] === 'string' ? String(meta['baseCurrency']).toLowerCase() : undefined
+  const rate = Number(meta['fxRate'])
+  if (!currency) return {}
+  if (!base || base === currency || !(rate > 0)) return { currency }
+  const factor = currencyMinorFactor(base) / currencyMinorFactor(currency)
+  const baseTotals = Object.fromEntries(
+    Object.entries(totals).map(([key, value]) => [
+      key,
+      typeof value === 'number' ? Math.round((value / rate) * factor) : value,
+    ]),
+  ) as T
+  return { currency, baseCurrency: base, fxRate: rate, baseTotals }
 }
 
 /** Rates older than this are not used to charge anyone: the store currency is. */

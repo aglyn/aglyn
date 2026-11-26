@@ -1254,7 +1254,8 @@ export function computeBuyNowOrder(
   return {
     lineItems,
     totals: computeCheckoutSessionTotals(lineItems, session, {
-      feeCents: metadataCents(metadata.feeCents),
+      // The take as charged when the sale was in another currency (AGL-4248).
+      feeCents: metadataCents(metadata.chargeFeeCents ?? metadata.feeCents),
       lineItemTaxCents,
       pricedInDiscountCents,
     }),

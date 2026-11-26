@@ -85,6 +85,15 @@ import {
 import { ensureCheckoutDomain } from './payment-method-domains'
 import { raiseCheckoutStarted } from './order-events'
 import {
+  type CheckoutCurrency,
+  checkoutAmountMinor,
+  checkoutLineMinor,
+  loadFxRates,
+  resolveCheckoutCurrency,
+  storeCurrencyContextFrom,
+  stripeCurrency,
+} from './currency'
+import {
   checkoutExtrasCents,
   encodeCheckoutExtrasMetadata,
   readChosenCheckoutExtras,
@@ -239,6 +248,31 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         snapshot.exists ? CommerceModel.liftLegacyProduct(snapshot.data() as any) : null,
       ]),
     )
+    /**
+     * The currency the shopper is charged in (AGL-4248). Everything below is
+     * priced and checked in the store currency as before; only the amounts
+     * handed to Stripe are converted, at the emission. A direct sale only: a
+     * destination sale's split and platform tax are store-currency figures.
+     * A cart that sells a gift card stays in the store currency, because a
+     * card's balance is.
+     */
+    let checkoutCurrency: CheckoutCurrency | undefined
+    if (body.currency && direct) {
+      const currencyStore = await hostRef.collection('settings').doc('store').get()
+      const resolved = resolveCheckoutCurrency(
+        storeCurrencyContextFrom(currencyStore.data(), await loadFxRates()),
+        body.currency,
+      )
+      const sellsGiftCard = cart.lines.some((line) => productsById.get(line.productId)?.giftCard)
+      if (resolved.foreign && !sellsGiftCard) checkoutCurrency = resolved
+    }
+    const chargeCurrency = checkoutCurrency ? stripeCurrency(checkoutCurrency) : 'usd'
+    /** The goods in the charge currency, as Stripe will total them. */
+    let itemsChargeMinor = 0
+    /** Each line's store-currency unit, for the tax engine (it prices in the store currency). */
+    const baseUnitByIndex = new Map<number, number>()
+    /** Each line's charge-currency unit, in cart order, for the order the webhook writes. */
+    const chargeUnits: number[] = []
     let itemsCents = 0
     /** Per-line values for scoped discount pricing. */
     const discountLines: { productId: string; amountCents: number }[] = []
@@ -413,11 +447,22 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       if (feePct > 0) feeApplies = true
       feeCents += Math.round((unitCents * line.quantity * feePct) / 100)
       params.set(`line_items[${index}][quantity]`, String(line.quantity))
-      params.set(`line_items[${index}][price_data][currency]`, 'usd')
+      // The charge-currency unit: the variant's fixed price there or its
+      // store price converted, plus each add-on's (AGL-4248).
+      const chargeUnit = checkoutCurrency
+        ? checkoutLineMinor(checkoutCurrency, product, variant, chosen.modifiers)
+        : unitCents
+      itemsChargeMinor += chargeUnit * line.quantity
+      baseUnitByIndex.set(index, unitCents)
+      chargeUnits[index] = chargeUnit
+      params.set(`line_items[${index}][price_data][currency]`, chargeCurrency)
       params.set(
         `line_items[${index}][price_data][unit_amount]`,
-        String(unitCents),
+        String(chargeUnit),
       )
+      if (checkoutCurrency?.entry.pricesIncludeTax) {
+        params.set(`line_items[${index}][price_data][tax_behavior]`, 'inclusive')
+      }
       // The variant, then the add-ons, as the order line will print them.
       const lineLabel = CommerceModel.lineLabelWithModifiers(
         Object.keys(variant.options ?? {}).length
@@ -650,8 +695,11 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     chargedExtras.forEach((extra, offset) => {
       const index = cart.lines.length + offset
       params.set(`line_items[${index}][quantity]`, '1')
-      params.set(`line_items[${index}][price_data][currency]`, 'usd')
-      params.set(`line_items[${index}][price_data][unit_amount]`, String(extra.amountCents))
+      params.set(`line_items[${index}][price_data][currency]`, chargeCurrency)
+      params.set(
+        `line_items[${index}][price_data][unit_amount]`,
+        String(checkoutCurrency ? checkoutAmountMinor(checkoutCurrency, extra.amountCents) : extra.amountCents),
+      )
       params.set(`line_items[${index}][price_data][product_data][name]`, extra.label.slice(0, 120))
       params.set(`line_items[${index}][price_data][product_data][tax_code]`, 'txcd_00000000')
     })
@@ -1125,14 +1173,25 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           // three old keys existed only because there were three mints. A
           // store-credit share names itself (AGL-3640): a balance that moved
           // between two tries is a different coupon, never a mismatch.
-          ...stripeKeyHeader(creditHeldCents > 0 ? `coupon-c${creditHeldCents}` : 'coupon'),
+          ...stripeKeyHeader(
+            `${creditHeldCents > 0 ? `coupon-c${creditHeldCents}` : 'coupon'}${checkoutCurrency ? `-${chargeCurrency}` : ''}`,
+          ),
           // On the seller's account for a direct sale: the session's
           // `discounts[0][coupon]` must name a coupon on its own account.
           ...sellerAccountHeader,
         },
         body: new URLSearchParams({
-          amount_off: String(Math.min(totalOffCents, itemsCents)),
-          currency: 'usd',
+          // In the charge currency, as the same share of the goods it is of
+          // the store-currency goods, so a 10% discount stays 10% (AGL-4248).
+          amount_off: String(
+            checkoutCurrency
+              ? Math.min(
+                  itemsChargeMinor,
+                  Math.round((Math.min(totalOffCents, itemsCents) * itemsChargeMinor) / Math.max(1, itemsCents)),
+                )
+              : Math.min(totalOffCents, itemsCents),
+          ),
+          currency: chargeCurrency,
           duration: 'once',
         }).toString(),
       }).then((response) => response.json())
@@ -1189,7 +1248,9 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // rate stands and the order says so.
     const cartEngineLines = cart.lines
       .map((line, index) => {
-        const unitCents = Number(params.get(`line_items[${index}][price_data][unit_amount]`) ?? NaN)
+        const unitCents =
+          baseUnitByIndex.get(index) ??
+          Number(params.get(`line_items[${index}][price_data][unit_amount]`) ?? NaN)
         return {
           index,
           line,
@@ -1276,7 +1337,22 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       params,
       shippingPlan.countries,
     )
-    CommerceModel.appendCheckoutShippingParams(params, shippingOptions)
+    CommerceModel.appendCheckoutShippingParams(
+      params,
+      checkoutCurrency
+        ? CommerceModel.shippingOptionsInCurrency(
+            shippingOptions,
+            storeSettings.get('shipping') as CommerceModel.ShippingSettings | undefined,
+            {
+              code: checkoutCurrency.code,
+              subtotalMinor: itemsChargeMinor,
+              convert: (cents, fixed) => checkoutAmountMinor(checkoutCurrency as CheckoutCurrency, cents, fixed),
+            },
+          )
+        : shippingOptions,
+      chargeCurrency,
+      checkoutCurrency?.entry.pricesIncludeTax ? { taxBehavior: 'inclusive' } : {},
+    )
 
     // Taxes (AGL-1953). This block used to be the `stripe` line alone, and a
     // `manual`-mode store — the mode the AGL-285 zone editor leaves a merchant
@@ -1480,7 +1556,11 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     )
     Object.entries(
       direct
-        ? directChargeParams(feeCents)
+        ? directChargeParams(
+            // The take in the charge currency (AGL-4248): Stripe reads
+            // `application_fee_amount` in the session's currency.
+            checkoutCurrency ? checkoutAmountMinor(checkoutCurrency, feeCents) : feeCents,
+          )
         : CommerceModel.destinationChargeParams({
             accountId: String(accountId),
             feeCents,
@@ -1508,6 +1588,27 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     params.set('metadata[hostId]', hostId)
     params.set('metadata[cartId]', cartId)
     params.set('metadata[feeCents]', String(Math.max(0, feeCents)))
+    // What the order records about the currency (AGL-4248). `feeCents` above
+    // stays the store-currency take; the order's figures are in the charge
+    // currency, with the store-currency equivalents beside them.
+    if (checkoutCurrency) {
+      for (const [key, value] of Object.entries(CommerceModel.encodeChargeUnitsMetadata(chargeUnits))) {
+        params.set(`metadata[${key}]`, value)
+      }
+      params.set('metadata[chargeFeeCents]', String(checkoutAmountMinor(checkoutCurrency, Math.max(0, feeCents))))
+      params.set(
+        'metadata[chargeExtrasCents]',
+        String(
+          chargedExtras.reduce(
+            (sum, extra) => sum + checkoutAmountMinor(checkoutCurrency as CheckoutCurrency, extra.amountCents),
+            0,
+          ),
+        ),
+      )
+      params.set('metadata[currency]', chargeCurrency)
+      params.set('metadata[baseCurrency]', checkoutCurrency.base.toLowerCase())
+      params.set('metadata[fxRate]', String(checkoutCurrency.rate))
+    }
     // Only on the shape where `transfer.amount` is no longer `charge.amount`,
     // so the merchant's actual payout stops being derivable from the charge
     // (AGL-1956). The shipping baseline is the other half: the difference

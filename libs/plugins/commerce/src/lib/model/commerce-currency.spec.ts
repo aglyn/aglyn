@@ -19,6 +19,10 @@ import {
   amountMinorIn,
   convertMinor,
   crossRate,
+  decodeChargeUnitsMetadata,
+  encodeChargeUnitsMetadata,
+  orderCurrencyFields,
+  saleMoneyText,
   currenciesShareSign,
   formatShopperMoney,
   parseEcbDailyXml,
@@ -203,5 +207,36 @@ describe('publicCurrencyAnswer', () => {
       rates: null,
     })
     expect(publicCurrencyAnswer({ base: 'USD', settings: undefined, rates }, now).rates).toBeNull()
+  })
+})
+
+describe('orders in another currency', () => {
+  it('round-trips the charged units through metadata, in chunks under the cap', () => {
+    const units = Array.from({ length: 150 }, (_, index) => 10_000 + index)
+    const metadata = encodeChargeUnitsMetadata(units)
+    expect(Object.values(metadata).every((value) => value.length <= 480)).toBe(true)
+    expect(Object.keys(metadata).length).toBeGreaterThan(1)
+    expect(decodeChargeUnitsMetadata(metadata)).toEqual(units)
+    expect(decodeChargeUnitsMetadata({})).toBeUndefined()
+  })
+
+  it('records the currency, and the store-currency totals at the rate', () => {
+    const fields = orderCurrencyFields(
+      { currency: 'nzd', metadata: { baseCurrency: 'usd', fxRate: '1.7' } },
+      { itemsCents: 10_200, totalCents: 14_100 },
+    )
+    expect(fields).toEqual({
+      currency: 'nzd',
+      baseCurrency: 'usd',
+      fxRate: 1.7,
+      baseTotals: { itemsCents: 6000, totalCents: 8294 },
+    })
+    expect(orderCurrencyFields({ currency: 'usd', metadata: {} }, { totalCents: 1 })).toEqual({ currency: 'usd' })
+  })
+
+  it('keeps a USD sale reading as it always has', () => {
+    expect(saleMoneyText(123_450, 'usd')).toBe('$1234.50')
+    expect(saleMoneyText(44_900, 'nzd')).toBe('NZ$449.00')
+    expect(saleMoneyText(2499, 'GBP')).toBe('£24.99')
   })
 })

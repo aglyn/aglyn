@@ -156,6 +156,27 @@ export function checkoutAmountMinor(
   )
 }
 
+/**
+ * One line's unit in the checkout currency: the variant (its fixed price or
+ * converted) plus each add-on sold with it (its fixed amount or converted).
+ */
+export function checkoutLineMinor(
+  currency: CheckoutCurrency,
+  product: { modifierGroups?: unknown },
+  variant: { id?: string; priceUsd?: number; fixedPrices?: Record<string, number> },
+  modifiers: readonly { groupId?: string; optionId?: string; priceCents: number }[],
+): number {
+  const groups = CommerceModel.productModifierGroups(product)
+  let unit = checkoutVariantMinor(currency, variant)
+  for (const modifier of modifiers) {
+    const option = groups
+      .find((group) => group.id === modifier.groupId)
+      ?.options.find((entry) => entry.id === modifier.optionId)
+    unit += checkoutAmountMinor(currency, modifier.priceCents, option?.fixedPriceCents)
+  }
+  return unit
+}
+
 /** A checkout-currency amount back in the store currency (minor), for the merchant's figures. */
 export function toBaseMinor(currency: CheckoutCurrency, minor: number): number {
   if (!currency.foreign) return Math.round(minor)
