@@ -219,7 +219,8 @@ fun quoteLineRequestFromLine(line: OrderLineItem): QuoteLineRequest =
       productId = line.productId,
       variantId = line.variantId?.takeIf { it.isNotEmpty() },
       quantity = line.quantity,
-      modifiers = line.modifiers.orEmpty().map { ModifierSelection(groupId = it.groupId, optionId = it.optionId) },
+      // A write-in's answer rides with its pick (the gear set builder).
+      modifiers = line.modifiers.orEmpty().map { ModifierSelection(groupId = it.groupId, optionId = it.optionId, text = it.text?.ifEmpty { null }) },
       included = line.included == true,
       description = line.description?.takeIf { it.isNotEmpty() },
     )

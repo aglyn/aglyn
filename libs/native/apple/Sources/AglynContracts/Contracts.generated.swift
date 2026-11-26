@@ -2259,10 +2259,12 @@ public enum MobilePushTransport: String, Codable, CaseIterable, Hashable, Sendab
 public struct ModifierSelection: Codable, Hashable, Sendable {
   public var groupId: String
   public var optionId: String
+  public var text: String?
 
-  public init(groupId: String, optionId: String) {
+  public init(groupId: String, optionId: String, text: String? = nil) {
     self.groupId = groupId
     self.optionId = optionId
+    self.text = text
   }
 }
 
@@ -3061,15 +3063,19 @@ public struct OrderLineModifier: Codable, Hashable, Sendable {
   public var group: String
   public var groupId: String
   public var name: String
+  public var nameOnOrder: Bool?
   public var optionId: String
   public var priceCents: Double
+  public var text: String?
 
-  public init(group: String, groupId: String, name: String, optionId: String, priceCents: Double) {
+  public init(group: String, groupId: String, name: String, nameOnOrder: Bool? = nil, optionId: String, priceCents: Double, text: String? = nil) {
     self.group = group
     self.groupId = groupId
     self.name = name
+    self.nameOnOrder = nameOnOrder
     self.optionId = optionId
     self.priceCents = priceCents
+    self.text = text
   }
 }
 
@@ -5043,18 +5049,26 @@ public struct ProductLabel: Codable, Hashable, Sendable {
 }
 
 public struct ProductModifierGroup: Codable, Hashable, Sendable {
+  public var digitsOnly: Bool?
   public var id: String
+  public var kind: String?
   public var max: Double
+  public var maxLength: Double?
   public var min: Double
   public var name: String
+  public var nameOnOrder: Bool?
   public var online: Bool?
   public var options: [ProductModifierOption]
 
-  public init(id: String, max: Double, min: Double, name: String, online: Bool? = nil, options: [ProductModifierOption]) {
+  public init(digitsOnly: Bool? = nil, id: String, kind: String? = nil, max: Double, maxLength: Double? = nil, min: Double, name: String, nameOnOrder: Bool? = nil, online: Bool? = nil, options: [ProductModifierOption]) {
+    self.digitsOnly = digitsOnly
     self.id = id
+    self.kind = kind
     self.max = max
+    self.maxLength = maxLength
     self.min = min
     self.name = name
+    self.nameOnOrder = nameOnOrder
     self.online = online
     self.options = options
   }

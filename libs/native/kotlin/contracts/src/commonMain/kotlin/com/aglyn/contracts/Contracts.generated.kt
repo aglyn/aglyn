@@ -1517,6 +1517,7 @@ internal object MobilePushTransportSerializer :
 data class ModifierSelection(
     val groupId: String,
     val optionId: String,
+    val text: String? = null,
 )
 
 @Serializable
@@ -2024,8 +2025,10 @@ data class OrderLineModifier(
     val group: String,
     val groupId: String,
     val name: String,
+    val nameOnOrder: Boolean? = null,
     val optionId: String,
     val priceCents: Double,
+    val text: String? = null,
 )
 
 @Serializable
@@ -3268,10 +3271,14 @@ data class ProductLabel(
 
 @Serializable
 data class ProductModifierGroup(
+    val digitsOnly: Boolean? = null,
     val id: String,
+    val kind: String? = null,
     val max: Double,
+    val maxLength: Double? = null,
     val min: Double,
     val name: String,
+    val nameOnOrder: Boolean? = null,
     val online: Boolean? = null,
     val options: List<ProductModifierOption>,
 )
