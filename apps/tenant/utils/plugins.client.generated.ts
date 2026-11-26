@@ -60,6 +60,12 @@ export const TENANT_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-marketing/site'),
   },
   {
+    id: 'ai',
+    apiPrefixes: ["ai","assist"],
+    register: {"site":"registerAiSite"},
+    load: () => import('@aglyn/plugins-ai/site'),
+  },
+  {
     id: 'waivers',
     apiPrefixes: ["waivers"],
     register: {"site":"registerWaiversPlugin"},

@@ -223,6 +223,13 @@
       },
       "description": "Events calendar v2 (AGL-4252): Calendar and Event details elements, repeating events, categories, tickets, calendar feed, events in site search. OFF by default.",
       "valueType": "JSON"
+    },
+    "release_ai_site_chat": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "An AI chat on a published site answering visitors from its own pages, products and listings (AGL-4250), Starter and up. OFF by default; turned on per workspace.",
+      "valueType": "JSON"
     }
   },
   "version": {

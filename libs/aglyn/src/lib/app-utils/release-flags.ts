@@ -55,6 +55,7 @@ export type ReleaseFlagKey =
   | 'release_site_starters'
   | 'release_video_embed_posters'
   | 'release_events_calendar_v2'
+  | 'release_ai_site_chat'
 
 export interface ReleaseFlagDefinition {
   key: ReleaseFlagKey
@@ -386,6 +387,19 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'category chips, search, add to calendar, tickets), repeating events, ' +
       'event categories, the calendar feed and events in site search ' +
       '(AGL-4252). OFF by default: the Event List and Events page as before.',
+    defaultEnabled: false,
+  },
+  // Per org (AGL-4250): the site chat door, its page enricher and the
+  // owner's settings and conversations answer 404 for a workspace the flag
+  // is off for (staff preview the console half).
+  {
+    key: 'release_ai_site_chat',
+    label: `${PLATFORM_BRAND_NAME} AI chat on published sites`,
+    description:
+      'An AI chat on a published site answering visitors from its own pages, ' +
+      'products and listings (AGL-4250), Starter and up, billed to the ' +
+      'workspace\u2019s AI credits under a site-chat allotment. OFF by ' +
+      'default: no site shows it until it is on for its workspace.',
     defaultEnabled: false,
   },
 ]
