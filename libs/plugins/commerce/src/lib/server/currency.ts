@@ -119,12 +119,13 @@ export function resolveCheckoutCurrency(
   const base = context.base
   const baseEntry: CommerceModel.StoreCurrency = { code: base, rounding: 'none' }
   const entry = CommerceModel.storeSellsIn(context.settings, base, requested)
-  const rate = entry ? CommerceModel.crossRate(context.rates, base, entry.code) : undefined
+  const rate = entry ? CommerceModel.currencyRate(context.rates, base, entry) : undefined
   if (
     !entry ||
     entry.code === base ||
     rate == null ||
-    !CommerceModel.ratesAreFresh(context.rates, nowMs)
+    // A manual rate never goes stale; a daily one does.
+    (!entry.manualRate && !CommerceModel.ratesAreFresh(context.rates, nowMs))
   ) {
     return { code: base, base, entry: baseEntry, rate: 1, rates: context.rates, foreign: false }
   }

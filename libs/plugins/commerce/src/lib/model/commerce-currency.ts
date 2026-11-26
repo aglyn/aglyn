@@ -45,9 +45,22 @@ export const CURRENCY_ROUNDING_LABELS: Readonly<Record<CurrencyRounding, string>
 export interface StoreCurrency {
   /** ISO 4217, upper case: 'NZD'. */
   code: string
+  /**
+   * Rounding of converted prices, OFF unless the merchant turns it on
+   * (Shopify's rule): converted prices round UP to the ending chosen.
+   */
   rounding?: CurrencyRounding
-  /** Added to the rate, in percent (0–10): covers conversion fees. */
+  /**
+   * Price adjustment, in percent (-90 to +100), on every converted price in
+   * this currency: Shopify's per-market adjustment. Positive covers Stripe's
+   * conversion fee, which the merchant pays otherwise.
+   */
   bufferPct?: number
+  /**
+   * A manual exchange rate: units of this currency per one unit of the store
+   * currency. Set, it replaces the daily rate and never goes stale.
+   */
+  manualRate?: number
   /**
    * Prices shown and charged in this currency INCLUDE tax (VAT/GST), the way
    * shoppers in the UK, EU, Australia and New Zealand expect. Only meaningful
@@ -78,7 +91,7 @@ export type FixedPrices = Record<string, number>
 /**
  * The currencies a store may sell in: the ones the European Central Bank
  * publishes a daily reference rate for, that Stripe charges cards in, and
- * that settle without Stripe's special-case rounding rules.
+ * that have two decimal places (every receipt and report formats cents).
  */
 export const SELLABLE_CURRENCIES: readonly string[] = [
   'USD',
@@ -87,7 +100,6 @@ export const SELLABLE_CURRENCIES: readonly string[] = [
   'AUD',
   'NZD',
   'CAD',
-  'JPY',
   'CHF',
   'SEK',
   'NOK',
@@ -105,7 +117,6 @@ export const SELLABLE_CURRENCIES: readonly string[] = [
   'THB',
   'MYR',
   'IDR',
-  'KRW',
   'RON',
   'TRY',
   'CNY',
@@ -221,8 +232,9 @@ export function storeCurrencies(
         entry.rounding as CurrencyRounding,
       )
         ? entry.rounding
-        : 'whole',
+        : 'none',
       bufferPct: clampBuffer(entry.bufferPct),
+      ...(Number(entry.manualRate) > 0 ? { manualRate: Number(entry.manualRate) } : {}),
       ...(entry.pricesIncludeTax ? { pricesIncludeTax: true } : {}),
     })
   }
@@ -231,8 +243,22 @@ export function storeCurrencies(
 
 function clampBuffer(value: unknown): number {
   const n = Number(value)
-  if (!Number.isFinite(n) || n <= 0) return 0
-  return Math.min(10, Math.round(n * 100) / 100)
+  if (!Number.isFinite(n) || n === 0) return 0
+  return Math.max(-90, Math.min(100, Math.round(n * 100) / 100))
+}
+
+/**
+ * The rate a store converts into `target` at: its manual rate when set,
+ * else the daily cross rate. `undefined` when neither covers it.
+ */
+export function currencyRate(
+  rates: FxRates | undefined,
+  base: string,
+  target: StoreCurrency,
+): number | undefined {
+  if (upper(base) === target.code) return 1
+  if (target.manualRate && target.manualRate > 0) return target.manualRate
+  return crossRate(rates, base, target.code)
 }
 
 /** Whether `code` is a currency this store sells in. */
@@ -314,7 +340,7 @@ export function convertMinor(
   rates: FxRates | undefined,
   options: { round?: boolean } = {},
 ): number | undefined {
-  const rate = crossRate(rates, from, target.code)
+  const rate = currencyRate(rates, from, target)
   if (rate == null) return undefined
   if (upper(from) === target.code) return Math.round(amountMinor)
   if (!amountMinor) return 0
@@ -323,7 +349,7 @@ export function convertMinor(
   const rounded =
     options.round === false
       ? roundMajor(major, 'none', target.code)
-      : roundMajor(major, target.rounding ?? 'whole', target.code)
+      : roundMajor(major, target.rounding ?? 'none', target.code)
   return Math.round(rounded * currencyMinorFactor(target.code))
 }
 
@@ -398,6 +424,78 @@ export function currenciesShareSign(codes: readonly string[]): boolean {
   return dollars.length > 1
 }
 
+/**
+ * Money in a timeline line or notice for a sale in `currency` (lower or
+ * upper case). A USD sale keeps the exact text it always had (`$1234.50`);
+ * any other currency names itself (`NZ$449.00`).
+ */
+export function saleMoneyText(cents: number, currency: string | null | undefined): string {
+  const code = upper(currency) || 'USD'
+  if (code === 'USD') return `$${((Number(cents) || 0) / 100).toFixed(2)}`
+  return formatShopperMoney(cents, code)
+}
+
+/** The metadata keys a checkout writes the charged line units under (AGL-4248). */
+export const CHARGE_UNITS_METADATA_PREFIX = 'chargeUnits'
+
+/** Line units as metadata entries, each under Stripe's 500-character value cap. */
+export function encodeChargeUnitsMetadata(units: readonly number[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  let chunk: string[] = []
+  let index = 0
+  const flush = () => {
+    if (chunk.length) out[`${CHARGE_UNITS_METADATA_PREFIX}${index++}`] = chunk.join(',')
+    chunk = []
+  }
+  for (const unit of units) {
+    const text = String(Math.max(0, Math.round(unit)))
+    if ([...chunk, text].join(',').length > 480) flush()
+    chunk.push(text)
+  }
+  flush()
+  return out
+}
+
+/** The line units back from session metadata, or undefined when absent. */
+export function decodeChargeUnitsMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+): number[] | undefined {
+  if (!metadata) return undefined
+  const units: number[] = []
+  for (let index = 0; typeof metadata[`${CHARGE_UNITS_METADATA_PREFIX}${index}`] === 'string'; index++) {
+    for (const part of String(metadata[`${CHARGE_UNITS_METADATA_PREFIX}${index}`]).split(',')) {
+      const n = Number(part)
+      units.push(Number.isFinite(n) ? n : 0)
+    }
+  }
+  return units.length ? units : undefined
+}
+
+/**
+ * The order's currency fields (AGL-4248) from a paid session: the charge
+ * currency Stripe reports and, when it is not the store's, the store
+ * currency, the rate and the totals there.
+ */
+export function orderCurrencyFields<T extends object>(
+  session: { currency?: unknown; metadata?: Record<string, unknown> | null } | null | undefined,
+  totals: T,
+): { currency?: string; baseCurrency?: string; fxRate?: number; baseTotals?: T } {
+  const currency = typeof session?.currency === 'string' ? session.currency.toLowerCase() : undefined
+  const meta = session?.metadata ?? {}
+  const base = typeof meta['baseCurrency'] === 'string' ? String(meta['baseCurrency']).toLowerCase() : undefined
+  const rate = Number(meta['fxRate'])
+  if (!currency) return {}
+  if (!base || base === currency || !(rate > 0)) return { currency }
+  const factor = currencyMinorFactor(base) / currencyMinorFactor(currency)
+  const baseTotals = Object.fromEntries(
+    Object.entries(totals).map(([key, value]) => [
+      key,
+      typeof value === 'number' ? Math.round((value / rate) * factor) : value,
+    ]),
+  ) as T
+  return { currency, baseCurrency: base, fxRate: rate, baseTotals }
+}
+
 /** Rates older than this are not used to charge anyone: the store currency is. */
 export const FX_RATES_MAX_AGE_MS = 4 * 24 * 60 * 60 * 1000
 
@@ -445,6 +543,7 @@ export function publicCurrencyAnswer(
   const currencies = storeCurrencies(context.settings, context.base).filter(
     (entry) =>
       entry.code === context.base ||
+      Boolean(entry.manualRate) ||
       (fresh && crossRate(context.rates, context.base, entry.code) != null),
   )
   const rates =
