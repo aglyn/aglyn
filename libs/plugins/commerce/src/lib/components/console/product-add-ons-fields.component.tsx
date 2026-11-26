@@ -82,8 +82,8 @@ export function newAddOnGroup(): CommerceModel.ProductModifierGroup {
 }
 
 /**
- * A new write-in (the gear set builder): one field the shopper types into,
- * such as the name or number for a jersey. Required, shown on the website,
+ * A new write-in (write-ins): one field the shopper types into,
+ * such as a name to print or an engraving. Required, shown on the website,
  * free until the merchant sets what it adds.
  */
 export function newWriteInGroup(): CommerceModel.ProductModifierGroup {
@@ -167,7 +167,7 @@ interface WriteInFieldsProps {
 }
 
 /**
- * One write-in in the editor (the gear set builder): what the field is
+ * One write-in in the editor (write-ins): what the field is
  * called, how long an answer can be, what a filled one adds, the note under
  * it, and whether it is required, numbers only and asked on the website.
  */
@@ -176,7 +176,7 @@ function WriteInFields(props: WriteInFieldsProps) {
   const option = group.options[0]
   const editOption = (next: CommerceModel.ProductModifierOption) =>
     edit({ options: group.options.map((entry, at) => (at === 0 ? next : entry)) })
-  const example = `${group.name || 'Name on jersey'}: ${group.digitsOnly ? '27' : 'SMITH'}`
+  const example = `${group.name || 'Engraving'}: ${group.digitsOnly ? '27' : 'For Sam'}`
   return (
     <Stack spacing={1.5}>
       <Typography variant="overline" color="text.secondary">
@@ -187,7 +187,7 @@ function WriteInFields(props: WriteInFieldsProps) {
           label="Field name"
           size="small"
           value={group.name}
-          placeholder="Name on jersey"
+          placeholder="Engraving"
           onChange={(event) => edit(withWriteInName(group, event.target.value))}
           sx={{ flex: 1, minWidth: (theme) => theme.spacing(20) }}
         />
@@ -225,7 +225,7 @@ function WriteInFields(props: WriteInFieldsProps) {
         label="Note"
         size="small"
         defaultValue={option?.note ?? ''}
-        placeholder="As it should print on the back"
+        placeholder="Exactly as it should read"
         onBlur={(event) => option && editOption(withChoiceCard(option, { note: event.target.value }))}
         helperText="Shown under the field on the product’s page."
         slotProps={{ htmlInput: { maxLength: PRODUCT_CHOICE_NOTE_MAX } }}
@@ -306,7 +306,7 @@ export const ProductAddOnsFields = memo(function ProductAddOnsFields(
           'printing on a canopy, or a milk in a latte. Each can be free or add to the price, and can ' +
           'cost more on a larger size. Show a group on the website to offer it on the product’s page; ' +
           'the register offers every group. A write-in asks the customer to type an answer, such as ' +
-          'the name and number for a jersey, and puts it on the order.'}
+          'a name to print, an engraving or a cake message, and puts it on the order.'}
       </Typography>
       {modifierGroups.map((group, groupIndex) => (
         <Box
@@ -384,7 +384,7 @@ export const ProductAddOnsFields = memo(function ProductAddOnsFields(
             />
             <Typography variant="caption" color="text.secondary">
               {group.nameOnOrder === true
-                ? `The order says “${group.name || 'Jersey size'}: ${group.options[0]?.name || 'M'}”.`
+                ? `The order says “${group.name || 'Size'}: ${group.options[0]?.name || 'M'}”.`
                 : `The order says “${group.options[0]?.name || 'M'}”. Turn this on when a choice ` +
                   'doesn’t say what it is on its own, like a size.'}
             </Typography>

@@ -94,7 +94,7 @@ struct ProductEditorSheet: View {
         "Add-ons are choices added to the item that don’t need their own stock, such as walls or printing on a canopy, "
           + "or a milk in a latte. Each can be free or add to the price, and can cost more on a larger size. Show a group "
           + "on the website to offer it on the product’s page; the register offers every group. A write-in asks the "
-          + "customer to type an answer, such as the name and number for a jersey, and puts it on the order."
+          + "customer to type an answer, such as a name to print, an engraving or a cake message, and puts it on the order."
       )
       .font(.footnote)
       .foregroundStyle(.secondary)
@@ -133,7 +133,7 @@ struct ProductEditorSheet: View {
     }
   }
 
-  /// One write-in (the gear set builder), as the console's `WriteInFields` has it: what the field is called, how long an
+  /// One write-in (write-ins), as the console's `WriteInFields` has it: what the field is called, how long an
   /// answer can be, what a filled one adds, the note under it, and whether it is required, numbers only and asked on
   /// the website.
   @ViewBuilder private func writeInSection(_ group: AddOnGroupDraft) -> some View {
@@ -143,7 +143,7 @@ struct ProductEditorSheet: View {
     Section {
       TextField(
         "Field name", text: Binding(get: { group.name }, set: { binding.wrappedValue = binding.wrappedValue.withWriteInName($0) }),
-        prompt: Text("Name on jersey")
+        prompt: Text("Engraving")
       )
       .accessibilityIdentifier("addon-write-in-name-\(group.id)")
       LabeledContent("Longest answer") {
@@ -178,7 +178,7 @@ struct ProductEditorSheet: View {
         TextField(
           "Note",
           text: Binding(get: { choice.wrappedValue.note }, set: { choice.wrappedValue.note = String($0.prefix(productChoiceNoteMax)) }),
-          prompt: Text("As it should print on the back")
+          prompt: Text("Exactly as it should read")
         )
         .accessibilityIdentifier("addon-write-in-note-\(group.id)")
         Text("Shown under the field on the product’s page.").font(.caption).foregroundStyle(.secondary)

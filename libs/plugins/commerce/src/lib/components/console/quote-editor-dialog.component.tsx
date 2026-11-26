@@ -1107,7 +1107,7 @@ function QuoteLineEditor(props: {
               </Stack>
             )}
             {groups.map((group) => {
-              // A write-in (the gear set builder): the answer the customer gave, typed into the quote.
+              // A write-in (write-ins): the answer the customer gave, typed into the quote.
               if (CommerceModel.modifierGroupIsWriteIn(group)) {
                 const option = group.options[0]
                 const text =

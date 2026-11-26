@@ -45,27 +45,30 @@ and no migration step is needed.
 
 ### More than 100 combinations {#more-than-100-combinations}
 
-Every value of every option makes more variants: 5 sizes, 5 frames and 6 print
-colors are 150 combinations, more than a product holds. When the options you
-type would make more than 100, the editor says how many, under the options:
+Every value of every option makes more variants: 5 sizes, 5 colors and 6
+prints are 150 combinations, more than a product holds. When the options you
+type would make more than 100, the editor says how many, under the options,
+and what to do:
 
-> These options make 150 combinations, and a product holds at most 100.
+> These options make 150 combinations, and a product holds at most 100. Keep
+> as options only what you stock separately, and move the rest to Add-ons.
 
 Every value you typed stays where it is, and the variants table stays as it
-was, so nothing is lost. **Save product** stays off until the options fit:
-remove some values, or move the choices that don't need their own stock to
-[add-ons](#add-ons).
+was, so nothing is lost. **Save product** stays off until the options fit.
 
-For a canopy, keep **Size** as the option, because each size is a different
-item on your shelf with its own stock and price. The frame, the walls and the
-printing are then add-ons: 5 sizes are 5 variants, and the rest are choices the
-shopper adds on the product's page, each with its price.
+The rule: **an option is for what you stock separately. Everything else is an
+[add-on](#add-ons).** Add-ons don't count toward the 100, combine without a
+limit, can be required, and can cost more on some sizes. A few examples:
 
-For a set made to order, such as a jersey, pants and gloves sold together, no
-size needs its own stock. Give the product no options at all, and add one
-required add-on group for each piece's size. Add
-[write-ins](#write-ins) for the name and number. There's then no limit on how
-the sizes combine: see [A gear set](#a-gear-set) for the whole set-up.
+| Product | Options (variants, with stock) | Add-ons |
+| -- | -- | -- |
+| A canopy in 5 sizes, 5 frames, walls and printing | **Size**: 5 variants | Frame (required), Walls, Printing |
+| A T-shirt in 5 sizes × 5 colors, with 6 prints | **Size** and **Color**: 25 variants | Print (required, 6 choices) |
+| A cake in 3 sizes, 8 flavors, with a message | **Size**: 3 variants | Flavor (required), Frosting, a [write-in](#write-ins) for the message |
+| A set of pieces made to order, such as jersey, pants and gloves | none: 1 variant | One required size group per piece, write-ins for a name and number |
+
+For a whole product built from choices, see
+[A product built from choices](#a-product-built-from-choices).
 
 ## Add-ons {#add-ons}
 
@@ -175,62 +178,71 @@ the quantity, priced from your catalog. A product that has no price yet can
 still take mockup requests: its page offers the form instead of **Buy now**.
 Products with **Offer a free mockup** off don't show the button or the form.
 
-### Write-ins: a name, a number {#write-ins}
+### Write-ins: text the customer types {#write-ins}
 
-A **write-in** is an add-on the customer types instead of picks: the name and
-number printed on a jersey, or a line of engraving. The answer goes on the cart
-line, the order, the receipt and your order emails, like
-“Name on jersey: SMITH”.
+A **write-in** is an add-on the customer types instead of picks: the words on
+a sign, an engraving on a watch, the message on a cake, or a name and number
+printed on a jersey. The answer goes on the cart line, the order, the receipt
+and your order emails, like “Engraving: For Sam”.
 
 1. Under **Add-ons** in the product editor, click **New write-in**.
-2. Type the **Field name**, such as "Name on jersey". The product's page and
-   the order use this name.
+2. Type the **Field name**, such as "Engraving" or "Cake message". The
+   product's page and the order use this name.
 3. Set **Longest answer**, the most characters it takes (up to 40).
-4. Turn on **Numbers only** for a race number, so only digits are taken. On a
-   phone, the number keypad opens.
-5. **Adds ($)** is what a filled-in answer adds to the price. Leave it blank
-   for no charge.
-6. **Note** is a line under the field, such as "As it should print on the back".
+4. Turn on **Numbers only** for a field that takes digits only, such as a
+   house number or a race number. On a phone, the number keypad opens.
+5. **Adds ($)** is what a filled-in answer adds to the price, such as $10 for
+   engraving. Leave it blank for no charge.
+6. **Note** is a line under the field, such as "Exactly as it should read".
 7. **Required** is on for a new write-in, so the item can't be added to a cart
    until the field is filled in. Turn it off to make the field optional.
    **Show on the website** works as it does for any group.
 
 On the product's page, a write-in is a text field among the other choices,
 with drop-downs or with picture cards. It shows how many characters are left
-and what's wrong with an answer, such as a letter in a numbers-only field. Two
-riders' sets with different names are two lines in the cart.
+and what's wrong with an answer, such as a letter in a numbers-only field. The
+same item with two different answers is two lines in the cart.
 
-At the register, the item's choices ask the same field, so you can type the
-name the customer gives you. A quote's line asks it too.
+At the register, the item's choices ask the same field, so you can type what
+the customer tells you. A quote's line asks it too.
 
 ### Name the group on the order {#name-the-group-on-the-order}
 
 A choice like "M" or "32" doesn't say what it is on its own. Turn on **Name the
 group on the order** on its group, and the order, the receipt and your emails
-say “Jersey size: M, Pant size: 32” instead of “M, 32”.
+say “Size: M, Flavor: Lemon” instead of “M, Lemon”.
 
-### A gear set {#a-gear-set}
+### A product built from choices {#a-product-built-from-choices}
 
-A set of pieces sold only together, each in its own size and made to order,
-such as a motocross jersey, pants and gloves, is one product with add-ons:
+Any product the customer puts together from choices, with no limit on how they
+combine, is one product with add-ons:
 
-1. Make the product with its price and no options, so it is one variant. If
-   each set is made to order, leave its **Inventory** blank so it never sells
-   out.
-2. Add a group for each piece's size: **Jersey size** (S, M, L, XL, 2XL),
-   **Pant size** (28, 30, 32 and up) and **Glove size**. Set **At least** to 1
-   on each one so it is required, and turn on **Name the group on the order**.
-3. Add a write-in **Name on jersey** (longest answer 14) and a write-in
-   **Number** (longest answer 3, **Numbers only**).
-4. To charge more for some sizes, type what each adds, such as +$20.00 on 3XL.
-   To make gloves optional, set the glove group's **At least** to 0.
+1. Keep as options only what you stock separately. A product made to order
+   can have no options at all, so it is one variant. Leave its **Inventory**
+   blank so it never sells out.
+2. Add a group for each choice the customer must make. Set **At least** to 1 so
+   it is required, and turn on **Name the group on the order** when its choices
+   don't say what they are, like sizes.
+3. Add a write-in for each thing the customer types.
+4. To charge more for a choice, type what it adds. To make a choice optional,
+   set its group's **At least** to 0.
 5. In the Besigner, set the **Product detail** block's **Show choices as** to
-   **Picture cards** if you want each size as a card.
+   **Picture cards** to show each choice as a card with a picture.
 
-The order then reads like “Jersey size: L, Pant size: 32, Glove size: M, Name
-on jersey: SMITH, Number: 27”. The sizes combine any way the rider needs, with
-no limit on combinations. To make many sets the same way, set up one, then
-copy its add-ons to the others through
+Some examples:
+
+- **A custom sign**: options none; required groups **Size** and **Material**;
+  write-in **Sign text** (longest answer 40). The order reads “Size: 24×36,
+  Material: Aluminum, Sign text: Open 7 days”.
+- **An engraved gift**: option **Finish** (each finish is stocked); write-in
+  **Engraving** (+$10.00), optional.
+- **A team gear set** of jersey, pants and gloves made to order: no options;
+  required groups **Jersey size**, **Pant size** and **Glove size**; write-ins
+  **Name on jersey** and **Number** (**Numbers only**). The sizes combine any
+  way each rider needs.
+
+To set up many products the same way, set up one, then copy its add-ons to
+the others through
 [import and export](store-import-and-export.md#add-ons-check-in-and-quick-keys).
 
 ## Sell in person only {#sell-in-person-only}

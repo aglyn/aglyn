@@ -197,7 +197,7 @@ export interface AddOnCellGroup {
   min: number
   max: number
   online: boolean
-  /** A write-in (the gear set builder): `write-in`, `up to 14`, `numbers only`. */
+  /** A write-in (write-ins): `write-in`, `up to 14`, `numbers only`. */
   writeIn?: { maxLength: number | null; digitsOnly: boolean }
   /** `name on order`: the group's name prints before the choice. */
   nameOnOrder?: boolean

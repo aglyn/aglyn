@@ -64,14 +64,14 @@ struct AddOnGroupDraft: Identifiable, Equatable {
   var max = 1
   var online: Bool?
   var choices: [AddOnChoiceDraft] = []
-  /// `"text"` makes the group a write-in (the gear set builder): the customer types the answer into one field, whose
+  /// `"text"` makes the group a write-in (write-ins): the customer types the answer into one field, whose
   /// one choice names it, prices it and carries its note. Nil is a group of choices.
   var kind: String?
   /// A write-in's longest answer, 1 to 40; nil reads as 20.
   var maxLength: Int?
-  /// A write-in that takes digits only, such as a race number.
+  /// A write-in that takes digits only, such as a number.
   var digitsOnly = false
-  /// Print the group's name before the choice on the order ("Jersey size: M").
+  /// Print the group's name before the choice on the order ("Size: M").
   var nameOnOrder = false
 
   var required: Bool { min > 0 }
@@ -122,7 +122,7 @@ func newAddOnGroup(mintID: (String) -> String = newAddOnID) -> AddOnGroupDraft {
 }
 
 /// A new write-in, as the console makes one (`newWriteInGroup`): one field the customer types into, such as the name or
-/// number for a jersey. Required, shown on the website, free until the merchant sets what it adds.
+/// number to print. Required, shown on the website, free until the merchant sets what it adds.
 func newWriteInGroup(mintID: (String) -> String = newAddOnID) -> AddOnGroupDraft {
   let id = mintID("g")
   return AddOnGroupDraft(
@@ -130,10 +130,10 @@ func newWriteInGroup(mintID: (String) -> String = newAddOnID) -> AddOnGroupDraft
     maxLength: defaultWriteInLength)
 }
 
-/// What a write-in prints like on the order, as the console's editor shows it: `Name on jersey: SMITH`.
+/// What a write-in prints like on the order, as the console's editor shows it: `Engraving: For Sam`.
 func writeInExample(_ group: AddOnGroupDraft) -> String {
   let name = group.name.trimmingCharacters(in: .whitespaces)
-  return "\(name.isEmpty ? "Name on jersey" : name): \(group.digitsOnly ? "27" : "SMITH")"
+  return "\(name.isEmpty ? "Engraving" : name): \(group.digitsOnly ? "27" : "For Sam")"
 }
 
 /// What a choice group's order line says, as the console's "Name the group on the order" explains it.
@@ -142,7 +142,7 @@ func nameOnOrderHelp(_ group: AddOnGroupDraft) -> String {
   let first = group.choices.first?.name.trimmingCharacters(in: .whitespaces) ?? ""
   let choice = first.isEmpty ? "M" : first
   return group.nameOnOrder
-    ? "The order says “\(groupName.isEmpty ? "Jersey size" : groupName): \(choice)”."
+    ? "The order says “\(groupName.isEmpty ? "Size" : groupName): \(choice)”."
     : "The order says “\(choice)”. Turn this on when a choice doesn’t say what it is on its own, like a size."
 }
 
@@ -224,7 +224,7 @@ func addOnsJSON(_ drafts: [AddOnGroupDraft], stored: JSONValue?) -> JSONValue {
       fields["min"] = .number(Double(group.min))
       fields["max"] = .number(Double(group.max))
       if let online = group.online { fields["online"] = .bool(online) }
-      // A write-in (the gear set builder) and a choice group's name on the order, as the console writes them.
+      // A write-in (write-ins) and a choice group's name on the order, as the console writes them.
       if let kind = group.kind { fields["kind"] = .string(kind) } else { fields.removeValue(forKey: "kind") }
       if let length = group.maxLength { fields["maxLength"] = .number(length) } else { fields.removeValue(forKey: "maxLength") }
       if group.kind == "text" {
@@ -266,7 +266,7 @@ func variantMatrixProblem(_ options: [OptionDraft]) -> String? {
   let count = variantCountOf(options)
   guard count > commerceMaxVariants else { return nil }
   let shown = count.formatted(.number.locale(Locale(identifier: "en_US")))
-  return "These options make \(shown) combinations, and a product holds at most \(commerceMaxVariants). Remove some "
-    + "values, or move choices that don’t need their own stock (walls, printing, extras) to Add-ons, priced by option "
-    + "where they cost more on a larger size."
+  return "These options make \(shown) combinations, and a product holds at most \(commerceMaxVariants). Keep as "
+    + "options only what you stock separately, and move the rest to Add-ons: they combine without a limit, can be "
+    + "required, and can cost more on some options. A choice the customer types, such as a name to print, is a write-in."
 }

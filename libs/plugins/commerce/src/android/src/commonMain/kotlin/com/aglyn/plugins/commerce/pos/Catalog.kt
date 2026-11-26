@@ -91,7 +91,7 @@ fun modifierGroupsFrom(raw: Any?): List<ProductModifierGroup> {
       min = group["min"].asDouble() ?: return emptyList(),
       max = group["max"].asDouble() ?: return emptyList(),
       online = group["online"] as? Boolean,
-      // A write-in (the gear set builder) and a group that names itself on the order.
+      // A write-in (write-ins) and a group that names itself on the order.
       kind = group["kind"] as? String,
       maxLength = group["maxLength"].asDouble(),
       digitsOnly = group["digitsOnly"] as? Boolean,

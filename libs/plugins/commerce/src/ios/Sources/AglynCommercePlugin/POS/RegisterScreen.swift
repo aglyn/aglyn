@@ -530,7 +530,7 @@ struct ItemSheetView: View {
           }
           ForEach(sheet.item.modifierGroups, id: \.id) { group in
             if group.isWriteIn {
-              // A write-in (the gear set builder): the cashier types the answer the customer gives.
+              // A write-in (write-ins): the cashier types the answer the customer gives.
               WriteInFieldSection(
                 group: group, variantID: sheet.variant.id,
                 text: sheet.picks.first { $0.groupId == group.id }?.text ?? "", money: model.money
