@@ -629,8 +629,18 @@ function CartLines(props: {
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="body2" noWrap>
               {line.name}
-              {line.variantLabel ? ` — ${line.variantLabel}` : ''}
             </Typography>
+            {/* The choices wrap on their own line, so a long set (sizes, a name to print) is read in full. */}
+            {line.variantLabel ? (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                component="div"
+                sx={{ overflowWrap: 'anywhere' }}
+              >
+                {line.variantLabel}
+              </Typography>
+            ) : null}
             {line.useDayKey ? (
               <Typography variant="caption" color="text.secondary" component="div">
                 {`For ${checkInDayLabel(line.useDayKey)}`}

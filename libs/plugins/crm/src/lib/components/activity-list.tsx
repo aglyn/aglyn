@@ -42,6 +42,7 @@ import { Chip, IconButton, Stack, Tooltip, Typography } from '@mui/material'
 import { deleteDoc, doc } from 'firebase/firestore'
 import { type ReactNode, useCallback, useState } from 'react'
 import { type ActivityScope, useCanEditActivity } from './activity-queries'
+import { ActivityRecordingsBlock } from './activity-recording'
 import {
   TimelineEntry,
   type TimelineExpansion,
@@ -281,7 +282,12 @@ export function ActivityRow(props: ActivityRowProps) {
       : null,
   ].filter(Boolean)
 
-  const { heading, opens } = activityHeading(activity)
+  const { heading, opens: bodyOpens } = activityHeading(activity)
+  // A recording or a transcript is what the row opens to as well: the player
+  // is read only once the row is opened, so a closed timeline costs nothing.
+  const recordingCount = Aglyn.normalizeCrmActivityMediaIds(activity.mediaIds).length
+  const hasTranscript = typeof activity.transcript === 'string' && activity.transcript.trim() !== ''
+  const opens = bodyOpens || recordingCount > 0 || hasTranscript
   const hasSubject = typeof activity.subject === 'string' && activity.subject.trim() !== ''
 
   return (
@@ -332,6 +338,14 @@ export function ActivityRow(props: ActivityRowProps) {
               />
             </Tooltip>
           ) : null}
+          {recordingCount > 0 ? (
+            <Chip
+              label={recordingCount > 1 ? `${recordingCount} recordings` : 'Recording'}
+              size="small"
+              variant="outlined"
+              data-testid="activity-recording-chip"
+            />
+          ) : null}
           {captured ? null : subject}
           {about}
           {detail.length ? (
@@ -343,7 +357,7 @@ export function ActivityRow(props: ActivityRowProps) {
       }
       // With no subject the heading IS the body's first line, so an open
       // row shows the body alone rather than its first line twice.
-      title={hasSubject || !opens || !expanded ? heading : null}
+      title={hasSubject || !bodyOpens || !expanded ? heading : null}
       titleVariant={hasSubject ? 'subtitle2' : 'body2'}
       meta={
         <Tooltip title={when.toLocaleString()}>
@@ -365,9 +379,21 @@ export function ActivityRow(props: ActivityRowProps) {
       }
       body={
         opens ? (
-          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-            {activity.body}
-          </Typography>
+          <>
+            {bodyOpens ? (
+              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                {activity.body}
+              </Typography>
+            ) : null}
+            {recordingCount > 0 || hasTranscript ? (
+              <ActivityRecordingsBlock
+                firestore={scope.firestore}
+                orgId={scope.orgId}
+                mediaIds={activity.mediaIds}
+                transcript={activity.transcript}
+              />
+            ) : null}
+          </>
         ) : undefined
       }
       actions={

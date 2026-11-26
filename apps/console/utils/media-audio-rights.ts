@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+import {
+  CALL_RECORDING_CONSENT_REQUIRED,
+  CALL_RECORDING_CONSENT_STATEMENT,
+  type MediaUploadPurpose,
+} from '@aglyn/aglyn/app-utils/call-recordings'
 import { isAudioUploadType } from './media-upload-limits'
 
 /**
@@ -46,12 +51,36 @@ export const AUDIO_RIGHTS_REQUIRED_MESSAGE =
 /** The request field that carries the answer. */
 export const AUDIO_RIGHTS_FIELD = 'rightsConfirmed'
 
+/**
+ * The request field naming what an upload is for (`callRecording`), which
+ * decides the sentence its uploader confirmed. Absent, audio is music.
+ */
+export const MEDIA_UPLOAD_PURPOSE_FIELD = 'purpose'
+
+/** What a person is told when a call recording arrives without the consent answer. */
+export const CALL_RECORDING_CONSENT_REQUIRED_MESSAGE =
+  'Confirm that everyone on the call knew it was being recorded before uploading it.'
+
+/** The `code` on a call recording sent without `private: true`. */
+export const CALL_RECORDING_PRIVATE_CODE = 'call_recording_must_be_private'
+
+/** What a person is told when a call recording is not private. */
+export const CALL_RECORDING_PRIVATE_MESSAGE =
+  'A call recording is stored private. Send it with private set to true.'
+
+/** A request's purpose, when it names one this platform knows. */
+export function mediaUploadPurpose(value: unknown): MediaUploadPurpose | null {
+  return value === 'callRecording' ? 'callRecording' : null
+}
+
 /** The confirmation as the asset document stores it. */
 export interface MediaRightsConfirmation {
   /** Who confirmed: a uid, or `api:<key id>` from the REST API. */
   uid: string
   atMs: number
   statement: string
+  /** What the audio is for, when it is not music — see {@link mediaUploadPurpose}. */
+  purpose?: MediaUploadPurpose
 }
 
 /** Why an audio upload is refused, as a route answers it. */
@@ -66,7 +95,11 @@ export interface AudioRightsRefusalReason {
  * is `null` exactly when the upload may go ahead.
  */
 export interface AudioRightsVerdict {
-  fields: { rightsConfirmation?: MediaRightsConfirmation }
+  fields: {
+    rightsConfirmation?: MediaRightsConfirmation
+    /** What the audio is for when it is not music: a call recording. */
+    mediaPurpose?: MediaUploadPurpose
+  }
   refusal: AudioRightsRefusalReason | null
 }
 
@@ -82,8 +115,57 @@ export function audioRightsVerdict(input: {
   confirmed: unknown
   uid: string
   nowMs?: number
+  /**
+   * The request's `purpose`. A call recording is not published anywhere, so
+   * it is not asked the music question: it must be PRIVATE instead (or a
+   * named purpose would be a way to put unlicensed music on a page), and
+   * while {@link CALL_RECORDING_CONSENT_REQUIRED} is off it asks nothing
+   * else. The asset is marked `mediaPurpose: 'callRecording'`, which is what
+   * a person's erasure finds it by.
+   */
+  purpose?: unknown
+  /** The request's `private` flag, which a call recording requires. */
+  isPrivate?: unknown
 }): AudioRightsVerdict {
   if (!isAudioUploadType(input.contentType)) return { fields: {}, refusal: null }
+  const purpose = mediaUploadPurpose(input.purpose)
+  if (purpose === 'callRecording') {
+    if (input.isPrivate !== true) {
+      return {
+        fields: {},
+        refusal: {
+          status: 400,
+          message: CALL_RECORDING_PRIVATE_MESSAGE,
+          code: CALL_RECORDING_PRIVATE_CODE,
+        },
+      }
+    }
+    if (!CALL_RECORDING_CONSENT_REQUIRED) {
+      return { refusal: null, fields: { mediaPurpose: purpose } }
+    }
+    if (input.confirmed !== true || !input.uid) {
+      return {
+        fields: {},
+        refusal: {
+          status: 400,
+          message: CALL_RECORDING_CONSENT_REQUIRED_MESSAGE,
+          code: AUDIO_RIGHTS_REQUIRED_CODE,
+        },
+      }
+    }
+    return {
+      refusal: null,
+      fields: {
+        mediaPurpose: purpose,
+        rightsConfirmation: {
+          uid: input.uid,
+          atMs: input.nowMs ?? Date.now(),
+          statement: CALL_RECORDING_CONSENT_STATEMENT,
+          purpose,
+        },
+      },
+    }
+  }
   if (input.confirmed !== true || !input.uid) {
     return {
       fields: {},

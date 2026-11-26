@@ -24,8 +24,13 @@ import {
   parseMediaRef,
   type PickedMedia,
   type PickMediaOptions,
+  MediaUploadError,
+  type UploadMediaOptions,
 } from '@aglyn/aglyn'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { uploadOrgMediaFile } from '../utils/upload-org-media-file'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface ConsoleMediaPickerProviderProps {
@@ -83,7 +88,30 @@ export function ConsoleMediaPickerProvider(
     [],
   )
 
-  const value = useMemo(() => ({ pickMedia }), [pickMedia])
+  const { data: user } = useUser()
+  /*
+   * An upload with no library on screen (a CRM call recording, filed on the
+   * activity it records): always the ORGANIZATION's library, the one a
+   * record's attachments resolve against, made from the mounted site when
+   * there is one so the org's Default sharing applies to it.
+   */
+  const uploadMedia = useCallback(
+    async (file: File, options: UploadMediaOptions): Promise<PickedMedia> => {
+      if (!orgId || !user) {
+        throw new MediaUploadError('Sign in to your workspace to upload a file.')
+      }
+      return uploadOrgMediaFile({
+        fetch: (url, init) => authorizedFetch(user, url, init),
+        orgId,
+        forHostId: hostId ?? null,
+        file,
+        options,
+      })
+    },
+    [orgId, hostId, user],
+  )
+
+  const value = useMemo(() => ({ pickMedia, uploadMedia }), [pickMedia, uploadMedia])
 
   return (
     <MediaPickerContext.Provider value={value}>

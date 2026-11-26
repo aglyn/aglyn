@@ -67,6 +67,8 @@ export * from './screen-link-value'
 // exactly those entry documents, so the walk runs on the server.
 export * from './link-references'
 export * from './analytics-path-key'
+// Which page of a site a counted path is (AGL-4253): the Analytics Pages table.
+export * from './page-traffic'
 export * from './contacts'
 // A lead's or a contact's email state (AGL-3245): the last verdict on its
 // address, in words a person can act on, mirrored from the senders' lists.

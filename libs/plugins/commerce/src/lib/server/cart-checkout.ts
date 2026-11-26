@@ -475,10 +475,13 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           : undefined,
         chosen.modifiers,
       )
-      params.set(
-        `line_items[${index}][price_data][product_data][name]`,
-        `${product.name}${lineLabel ? ` (${lineLabel})` : ''}`.slice(0, 120),
-      )
+      const lineName = `${product.name}${lineLabel ? ` (${lineLabel})` : ''}`
+      params.set(`line_items[${index}][price_data][product_data][name]`, lineName.slice(0, 120))
+      // A long set of choices (sizes, write-ins) is cut from the name at 120,
+      // so the payment page also shows all of them in the line's description.
+      if (lineName.length > 120 && lineLabel) {
+        params.set(`line_items[${index}][price_data][product_data][description]`, lineLabel.slice(0, 500))
+      }
     })
 
     // CARD READER HARDWARE ON THE PLATFORM'S OWN STORE (AGL-4038): taxed as

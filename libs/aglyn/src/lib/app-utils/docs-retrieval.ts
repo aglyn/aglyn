@@ -20,6 +20,13 @@ import {
   type DocsSection,
 } from './docs-index.generated'
 import { DOCS_BASE_URL } from './docs-help'
+import {
+  buildSectionIndex,
+  rankSections,
+  RETRIEVAL_STOP_WORDS,
+  retrievalTokens,
+  type SectionIndex,
+} from './section-retrieval'
 
 /**
  * Lexical docs search (AGL-1860, phase 1) — deliberately no vector store: a
@@ -34,18 +41,11 @@ import { DOCS_BASE_URL } from './docs-help'
  */
 
 /** Words too common in this corpus to carry signal. */
-const STOP_WORDS = new Set([
-  'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'can', 'do', 'does',
-  'for', 'from', 'how', 'i', 'in', 'is', 'it', 'my', 'of', 'on', 'or',
-  'that', 'the', 'this', 'to', 'what', 'when', 'where', 'which', 'why',
-  'with', 'you', 'your',
-])
+const STOP_WORDS = RETRIEVAL_STOP_WORDS
 
 /** Lowercase word tokens, stop words removed, length >= 2. */
 export function tokenize(text: string): string[] {
-  return (text.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? []).filter(
-    (token) => !STOP_WORDS.has(token),
-  )
+  return retrievalTokens(text)
 }
 
 export interface ScoredSection {
@@ -54,52 +54,11 @@ export interface ScoredSection {
 }
 
 /**
- * Score one section against query tokens. Term frequency saturates quickly
- * (BM25-ish k=1.2) so one section mentioning "domain" ten times does not
- * drown a section about the actual task; title and heading hits carry
- * dedicated boosts because those are the docs' own statement of topic.
+ * Tokenized once per process — module scope, ~650 sections. The scorer is
+ * the shared section scorer (`section-retrieval.ts`, AGL-4250), without its
+ * idf weight: the docs' deflection share was measured on raw scores.
  */
-function scoreSection(
-  section: DocsSection,
-  queryTokens: readonly string[],
-  bodyTokenCounts: Map<string, number>,
-  titleTokens: Set<string>,
-  headingTokens: Set<string>,
-): number {
-  let score = 0
-  for (const token of queryTokens) {
-    const tf = bodyTokenCounts.get(token) ?? 0
-    if (tf > 0) score += (tf * 2.2) / (tf + 1.2)
-    if (titleTokens.has(token)) score += 2.5
-    if (headingTokens.has(token)) score += 2
-  }
-  return score
-}
-
-interface IndexedSection {
-  section: DocsSection
-  bodyTokenCounts: Map<string, number>
-  titleTokens: Set<string>
-  headingTokens: Set<string>
-}
-
-/** Tokenized once per process — module scope, ~650 sections. */
-let indexed: IndexedSection[] | null = null
-
-function buildIndex(sections: readonly DocsSection[]): IndexedSection[] {
-  return sections.map((section) => {
-    const bodyTokenCounts = new Map<string, number>()
-    for (const token of tokenize(section.text)) {
-      bodyTokenCounts.set(token, (bodyTokenCounts.get(token) ?? 0) + 1)
-    }
-    return {
-      section,
-      bodyTokenCounts,
-      titleTokens: new Set(tokenize(section.title)),
-      headingTokens: new Set(tokenize(section.heading)),
-    }
-  })
-}
+let indexed: SectionIndex<DocsSection> | null = null
 
 /**
  * Top-`limit` docs sections for a user question. Returns an empty array when
@@ -111,64 +70,29 @@ export function retrieveDocsSections(
   limit = 6,
   sections: readonly DocsSection[] = DOCS_SECTION_INDEX,
 ): ScoredSection[] {
-  const queryTokens = [...new Set(tokenize(question))]
-  if (!queryTokens.length) return []
   const index =
     sections === DOCS_SECTION_INDEX
-      ? (indexed ??= buildIndex(sections))
-      : buildIndex(sections)
-  return index
-    .map((entry) => ({
-      section: entry.section,
-      score: scoreSection(
-        entry.section,
-        queryTokens,
-        entry.bodyTokenCounts,
-        entry.titleTokens,
-        entry.headingTokens,
-      ),
-    }))
-    .filter((scored) => scored.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
+      ? (indexed ??= buildSectionIndex(sections))
+      : buildSectionIndex(sections)
+  return rankSections(index, question, { limit })
 }
 
 /**
  * How many indexed sections each token appears in — the raw material for an
  * IDF weight (AGL-2486).
  *
- * Lives here rather than in the deflection module because the tokenized index
- * is already built here and rebuilding it there would tokenize ~500KB of docs
- * a second time, per process, to reach the same numbers. Memoised alongside
- * `indexed` and derived from it, so the two can never disagree about what a
- * token is.
- *
  * Counts SECTIONS, not pages: a term confined to one page but repeated in
  * every section of it is still a specific term, and page-level counting would
- * flatten exactly the distinction the weight exists to make.
+ * flatten exactly the distinction the weight exists to make. Derived from the
+ * same index the scorer reads, so the two can never disagree about what a
+ * token is.
  */
-let documentFrequency: Map<string, number> | null = null
-
 export function docsDocumentFrequency(): {
   frequency: ReadonlyMap<string, number>
   sections: number
 } {
-  if (!documentFrequency) {
-    const index = (indexed ??= buildIndex(DOCS_SECTION_INDEX))
-    const frequency = new Map<string, number>()
-    for (const entry of index) {
-      const seen = new Set<string>([
-        ...entry.bodyTokenCounts.keys(),
-        ...entry.titleTokens,
-        ...entry.headingTokens,
-      ])
-      for (const token of seen) {
-        frequency.set(token, (frequency.get(token) ?? 0) + 1)
-      }
-    }
-    documentFrequency = frequency
-  }
-  return { frequency: documentFrequency, sections: DOCS_SECTION_INDEX.length }
+  const index = (indexed ??= buildSectionIndex(DOCS_SECTION_INDEX))
+  return { frequency: index.frequency, sections: DOCS_SECTION_INDEX.length }
 }
 
 /** A letter of any script but Latin: Arabic, Hebrew, Cyrillic, CJK, Devanagari… */

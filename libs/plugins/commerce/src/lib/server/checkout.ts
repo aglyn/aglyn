@@ -1150,6 +1150,10 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           }
         : {}),
       'line_items[0][price_data][product_data][name]': chargedLineName,
+      // A long set of choices is cut from the name at 120; the description carries all of them.
+      ...(lineLabel && chargedLineName.length >= 120
+        ? { 'line_items[0][price_data][product_data][description]': lineLabel.slice(0, 500) }
+        : {}),
       ...(isSubscription
         ? {
             'line_items[0][price_data][recurring][interval]':
