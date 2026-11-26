@@ -301,6 +301,10 @@ jest.mock('../utils/server/media-scope', () => ({
     options.isPrivate
       ? 'DELETE'
       : `/api/media/cdn/${options.cdnScope}/${options.mediaId}`,
+  // The create-time form: no field at all for a private asset, since a
+  // delete sentinel inside `create()` is refused by Firestore.
+  mediaCdnPathCreateField: (options: { cdnScope: string; mediaId: string; isPrivate: boolean }) =>
+    options.isPrivate ? {} : { cdnPath: `/api/media/cdn/${options.cdnScope}/${options.mediaId}` },
 }))
 
 jest.mock('firebase-admin/firestore', () => {

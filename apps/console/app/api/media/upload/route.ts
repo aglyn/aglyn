@@ -53,7 +53,7 @@ import {
   folderStoragePath,
   mediaObjectPath,
   resolveMediaScope,
-  mediaCdnPathUpdate,
+  mediaCdnPathCreateField,
 } from '../../../../utils/server/media-scope'
 
 import {
@@ -356,6 +356,9 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const mediaId = createResourceUid()
+    // A private asset (AGL-1051) carries no download token, so no raw URL to
+    // its bytes exists; it is reached only through a signed link.
+    const privateUpload = body?.['private'] === true
     const token = randomUUID()
     // Real folders (org DAM work): the object lives INSIDE its folder's
     // Storage prefix, so the bucket tree mirrors the library tree.
@@ -369,13 +372,14 @@ async function handler(request: Request): Promise<Response> {
         // Immutable is safe: the CDN path embeds the content hash, and
         // raw download URLs embed the token — both change with content.
         cacheControl: 'public, max-age=31536000, immutable',
-        metadata: { firebaseStorageDownloadTokens: token },
+        ...(privateUpload ? {} : { metadata: { firebaseStorageDownloadTokens: token } }),
       },
     })
-    const url =
-      `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
-      `${encodeURIComponent(objectPath)}` +
-      `?alt=media&token=${token}`
+    const url = privateUpload
+      ? null
+      : `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
+        `${encodeURIComponent(objectPath)}` +
+        `?alt=media&token=${token}`
 
     // Auto-captured metadata (AGL-173): image dimensions from the file
     // header (best-effort, never a gate) and the uploader's uid.
@@ -460,7 +464,7 @@ async function handler(request: Request): Promise<Response> {
       fileName,
       contentType,
       sizeBytes: buffer.length,
-      url,
+      ...(url ? { url } : {}),
       storagePath: objectPath,
       folderId,
       // What the library filters and searches by (AGL-3327) — a query cannot
@@ -520,7 +524,7 @@ async function handler(request: Request): Promise<Response> {
       // Stable, mediaId-keyed CDN URL (AGL-829): no content hash, so it
       // survives replace and folder moves — references never break. The
       // path/no-path rule is shared with replace and set-private.
-      cdnPath: mediaCdnPathUpdate({
+      ...mediaCdnPathCreateField({
         billing: org,
         cdnScope: scope.cdnScope,
         mediaId,

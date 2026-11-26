@@ -239,6 +239,7 @@ jest.mock('../utils/server/media-scope', () => ({
   folderStoragePath: async () => '',
   mediaObjectPath: () => 'orgs/org-1/media/media-1',
   mediaCdnPathUpdate: () => '/api/media/cdn/org:org-1/media-1',
+  mediaCdnPathCreateField: () => ({ cdnPath: '/api/media/cdn/org:org-1/media-1' }),
 }))
 
 import { resolveOrgEntitlements } from '@aglyn/aglyn/server'

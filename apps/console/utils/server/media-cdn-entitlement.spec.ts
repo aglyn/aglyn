@@ -38,7 +38,7 @@
  * next writer re-opening it.
  */
 
-import { mediaCdnPathUpdate } from './media-scope'
+import { mediaCdnPathCreateField, mediaCdnPathUpdate } from './media-scope'
 
 const CDN_SCOPE = 'org:testOrg'
 const MEDIA_ID = 'mediaAbc'
@@ -140,5 +140,34 @@ describe('mediaCdnPathUpdate — the mediaCdn entitlement gate', () => {
     it('mints no path for a private asset on a free plan', () => {
       expect(isDeleteSentinel(update({ plan: 'free' }, true))).toBe(true)
     })
+  })
+})
+
+describe('mediaCdnPathCreateField — a new document never carries a delete sentinel', () => {
+  // Firestore refuses FieldValue.delete() inside a plain set() or create(),
+  // which made every private upload a 500 on all three ingress routes.
+  it('leaves the field out for a private asset', () => {
+    expect(
+      mediaCdnPathCreateField({ billing: { plan: 'pro' }, cdnScope: CDN_SCOPE, mediaId: MEDIA_ID, isPrivate: true }),
+    ).toEqual({})
+  })
+
+  it('carries the path for a public one', () => {
+    expect(
+      mediaCdnPathCreateField({ billing: { plan: 'pro' }, cdnScope: CDN_SCOPE, mediaId: MEDIA_ID, isPrivate: false }),
+    ).toEqual({ cdnPath: PATH })
+  })
+
+  it('is what every ingress route writes on create', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readFileSync } = require('node:fs') as typeof import('node:fs')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { join } = require('node:path') as typeof import('node:path')
+    const root = join(__dirname, '..', '..')
+    for (const path of ['app/api/media/upload/route.ts', 'app/api/media/upload-url/route.ts', 'utils/api-v1-resources.ts']) {
+      const source = readFileSync(join(root, path), 'utf8')
+      expect({ path, update: source.includes('cdnPath: mediaCdnPathUpdate(') }).toEqual({ path, update: false })
+      expect(source).toContain('...mediaCdnPathCreateField(')
+    }
   })
 })
