@@ -437,7 +437,7 @@ class RegisterModel(
   }
 
   fun open(item: PosItem, variant: PosVariant) {
-    val defaults = item.modifierGroups.filter { it.single() && it.required() }.map { ModifierSelection(it.id, it.options.first().id) }
+    val defaults = item.modifierGroups.filter { it.single() && it.required() && !it.isWriteIn() }.map { ModifierSelection(it.id, it.options.first().id) }
     sheet = ItemSheet(item, variant.id, defaults, 1)
   }
 

@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.aglyn.plugins.commerce.pos.DEFAULT_WRITE_IN_LENGTH
 import com.aglyn.plugins.commerce.pos.POS_MAX_MODIFIER_GROUPS
 import com.aglyn.plugins.commerce.pos.POS_MAX_MODIFIER_OPTIONS
 import com.aglyn.core.mediaPreviewUrl
@@ -56,13 +57,16 @@ internal fun AddOnsFields(context: NativePluginContext, draft: ProductDraft, cha
   Text(
     "Add-ons are choices added to the item that don’t need their own stock, such as walls or printing on a canopy, or a milk in a latte. " +
       "Each can be free or add to the price, and can cost more on a larger size. Show a group on the website to offer it on the product’s page; " +
-      "the register offers every group.",
+      "the register offers every group. A write-in asks the customer to type an answer, such as the name and number for a jersey, " +
+      "and puts it on the order.",
     style = MaterialTheme.typography.bodySmall,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
   )
   draft.addOns.forEachIndexed { groupIndex, group ->
     OutlinedCard(Modifier.fillMaxWidth().testTag("addon-group-$groupIndex")) {
-      Column(Modifier.padding(space(1.5f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+      if (group.isWriteIn) {
+        WriteInFields(group, "$groupIndex", { setGroup(groupIndex, it) }) { setGroups(draft.addOns.filterIndexed { at, _ -> at != groupIndex }) }
+      } else Column(Modifier.padding(space(1.5f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
         OutlinedTextField(
           group.name, { setGroup(groupIndex, group.copy(name = it)) }, label = { Text("Group name") }, placeholder = { Text("Walls") },
           singleLine = true, modifier = Modifier.fillMaxWidth().testTag("addon-group-name-$groupIndex"),
@@ -84,6 +88,19 @@ internal fun AddOnsFields(context: NativePluginContext, draft: ProductDraft, cha
           }
           Switch(group.online == true, { setGroup(groupIndex, group.copy(online = it)) }, Modifier.testTag("addon-group-online-$groupIndex"))
         }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Column(Modifier.weight(1f)) {
+            Text("Name the group on the order")
+            val first = group.choices.firstOrNull()?.name?.ifBlank { null } ?: "M"
+            Text(
+              if (group.nameOnOrder == true) "The order says “${group.name.ifBlank { "Jersey size" }}: $first”."
+              else "The order says “$first”. Turn this on when a choice doesn’t say what it is on its own, like a size.",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+          Switch(group.nameOnOrder == true, { setGroup(groupIndex, group.copy(nameOnOrder = it)) }, Modifier.testTag("addon-group-name-on-order-$groupIndex"))
+        }
         group.choices.forEachIndexed { choiceIndex, choice ->
           ChoiceFields(context, draft, choice, "$groupIndex-$choiceIndex", { setGroup(groupIndex, group.copy(choices = group.choices.toMutableList().also { list -> list[choiceIndex] = it })) }) {
             setGroup(groupIndex, group.withChoiceRemoved(choiceIndex))
@@ -102,16 +119,84 @@ internal fun AddOnsFields(context: NativePluginContext, draft: ProductDraft, cha
       }
     }
   }
-  OutlinedButton(
-    onClick = { setGroups(draft.addOns + newAddOnGroup()) },
-    enabled = draft.addOns.size < POS_MAX_MODIFIER_GROUPS,
-    modifier = Modifier.testTag("addon-group-add"),
-  ) {
-    Icon(AglynIcons.named("add"), contentDescription = null)
-    Text("New add-on group", Modifier.padding(start = space(1f)))
+  androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+    OutlinedButton(
+      onClick = { setGroups(draft.addOns + newAddOnGroup()) },
+      enabled = draft.addOns.size < POS_MAX_MODIFIER_GROUPS,
+      modifier = Modifier.testTag("addon-group-add"),
+    ) {
+      Icon(AglynIcons.named("add"), contentDescription = null)
+      Text("New add-on group", Modifier.padding(start = space(1f)))
+    }
+    OutlinedButton(
+      onClick = { setGroups(draft.addOns + newWriteInGroup()) },
+      enabled = draft.addOns.size < POS_MAX_MODIFIER_GROUPS,
+      modifier = Modifier.testTag("addon-writein-add"),
+    ) {
+      Icon(AglynIcons.named("add"), contentDescription = null)
+      Text("New write-in", Modifier.padding(start = space(1f)))
+    }
   }
   if (draft.addOns.isNotEmpty()) {
     checkAddOns(draft.addOns)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.testTag("addon-problem")) }
+  }
+}
+
+/**
+ * One write-in in the editor (the gear set builder), as the console's `WriteInFields`: what the field is called, how
+ * long an answer can be, what a filled one adds, the note under it, and whether it is required, numbers only and asked
+ * on the website.
+ */
+@Composable
+private fun WriteInFields(group: AddOnGroupDraft, tag: String, update: (AddOnGroupDraft) -> Unit, remove: () -> Unit) {
+  val option = group.choices.firstOrNull()
+  fun updateOption(next: AddOnChoiceDraft) = update(group.copy(choices = group.choices.mapIndexed { at, choice -> if (at == 0) next else choice }))
+  var length by remember(group.id) { mutableStateOf((group.maxLength ?: DEFAULT_WRITE_IN_LENGTH).toString()) }
+  val example = "${group.name.ifBlank { "Name on jersey" }}: ${if (group.digitsOnly == true) "27" else "SMITH"}"
+  Column(Modifier.padding(space(1.5f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+    Text("WRITE-IN", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    OutlinedTextField(
+      group.name, { update(group.withWriteInName(it)) }, label = { Text("Field name") }, placeholder = { Text("Name on jersey") },
+      singleLine = true, modifier = Modifier.fillMaxWidth().testTag("addon-writein-name-$tag"),
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+      OutlinedTextField(
+        length,
+        { typed ->
+          length = typed.filter(Char::isDigit).take(2)
+          update(group.copy(maxLength = writeInLengthOf(length)))
+        },
+        label = { Text("Longest answer") }, supportingText = { Text("Characters") }, singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f).testTag("addon-writein-length-$tag"),
+      )
+      OutlinedTextField(
+        option?.price.orEmpty(), { typed -> option?.let { updateOption(it.copy(price = typed)) } }, label = { Text("Adds") }, prefix = { Text("$") },
+        placeholder = { Text("0.00") }, supportingText = { Text("When filled in") }, singleLine = true, enabled = option != null,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f).testTag("addon-writein-price-$tag"),
+      )
+    }
+    OutlinedTextField(
+      option?.note.orEmpty(), { typed -> option?.let { updateOption(it.copy(note = typed.take(PRODUCT_CHOICE_NOTE_MAX))) } }, label = { Text("Note") },
+      placeholder = { Text("As it should print on the back") }, supportingText = { Text("Shown under the field on the product’s page.") },
+      singleLine = true, enabled = option != null, modifier = Modifier.fillMaxWidth().testTag("addon-writein-note-$tag"),
+    )
+    SwitchLine("Required", group.min > 0, "addon-writein-required-$tag") { update(group.copy(min = if (it) 1 else 0)) }
+    SwitchLine("Numbers only", group.digitsOnly == true, "addon-writein-digits-$tag") { update(group.copy(digitsOnly = it)) }
+    SwitchLine("Show on the website", group.online == true, "addon-writein-online-$tag") { update(group.copy(online = it)) }
+    Text(
+      "The answer goes on the order, the receipt and your order emails, like “$example”." + if (group.online == true) "" else " Asked at the register only.",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    TextButton(onClick = remove, modifier = Modifier.testTag("addon-writein-remove-$tag")) { Text("Remove write-in", color = MaterialTheme.colorScheme.error) }
+  }
+}
+
+@Composable
+private fun SwitchLine(label: String, on: Boolean, tag: String, set: (Boolean) -> Unit) {
+  Row(verticalAlignment = Alignment.CenterVertically) {
+    Text(label, Modifier.weight(1f))
+    Switch(on, set, Modifier.testTag(tag))
   }
 }
 
