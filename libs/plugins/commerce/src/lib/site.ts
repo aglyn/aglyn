@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
 import * as Account from './components/account'
 import * as Cart from './components/cart'
+import * as CurrencySelector from './components/currency-selector'
 import * as Gate from './components/gate'
 import * as GatedVideo from './components/gated-video'
 import * as MemberFeed from './components/member-feed'
@@ -143,6 +144,13 @@ export const COMMERCE_BUNDLE: Aglyn.FeatureBundleEntry[] = [
     component: ProductOptionsField.default,
     schema: ProductOptionsField.schema,
     presets: ProductOptionsField.presets,
+  },
+  {
+    // Shoppers pick the currency prices show in (AGL-4248); hidden on a
+    // store that sells in one currency.
+    component: CurrencySelector.default,
+    schema: CurrencySelector.schema,
+    presets: CurrencySelector.presets,
   },
 ]
 

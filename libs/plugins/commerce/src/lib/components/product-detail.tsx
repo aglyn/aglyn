@@ -64,6 +64,7 @@ import { ID as RELATED_PRODUCTS_ID } from './related-products'
 import { readLocalWishlist, toggleWishlist } from './wishlist'
 import { StorefrontPaymentElementFallback } from './storefront-payment-element-fallback'
 import { CheckoutReturnNotice } from './checkout-return-notice'
+import { useShopperCurrency } from './shopper-currency'
 import { zonedDayKey } from '@aglyn/shared-util-timestamp/zoned-time'
 
 /**
@@ -126,6 +127,8 @@ interface DetailVariant {
   /** `null` while the product is listed before it has a price (AGL-3676). */
   priceUsd: number | null
   compareAtPriceUsd?: number
+  /** The merchant's own price per currency (AGL-4248), major units. */
+  fixedPrices?: Record<string, number>
   soldOut: boolean
   imageUrl?: string
   sku?: string
@@ -193,11 +196,6 @@ const ProductRestockNotify = lazy(() => import('./product-restock-notify'))
 /** The Details and Shipping & returns folds (AGL-4205: split out), only where switched on. */
 const ProductDetailPanels = lazy(() => import('./product-detail-panels'))
 
-/** Money on the product page, in the store's currency: `$1,250.00`, never `$1250`. */
-const money = (cents: number) => CommerceModel.formatOrderMoney(cents)
-
-/** A price in dollars as the page prints it. */
-const moneyFromUsd = (priceUsd: number) => money(Math.round(priceUsd * 100))
 
 const SAMPLE: Detail = {
   id: 'sample',
@@ -265,6 +263,30 @@ export function productPageAddOns(
   return checked.ok
     ? { ready: true, extraCents }
     : { ready: false, extraCents, ...(checked.error ? { error: checked.error } : {}) }
+}
+
+/**
+ * What the picks add to one unit in the shopper's currency (AGL-4248): each
+ * add-on converted on its own, its fixed amount winning, as the cart and
+ * checkout price it.
+ */
+export function productPageAddOnsMinor(
+  product: Pick<Detail, 'name' | 'modifierGroups'>,
+  picks: readonly CommerceModel.ModifierSelection[],
+  variantId: string | undefined,
+  amountMinor: (baseCents: number, fixedMinor?: Record<string, number>) => number,
+): number {
+  const groups = product.modifierGroups ?? []
+  if (!groups.length) return 0
+  return CommerceModel.soldLineModifiers({ modifierGroups: groups }, picks, variantId).reduce(
+    (sum, modifier) => {
+      const option = groups
+        .find((group) => group.id === modifier.groupId)
+        ?.options.find((entry) => entry.id === modifier.optionId)
+      return sum + amountMinor(modifier.priceCents, option?.fixedPriceCents)
+    },
+    0,
+  )
 }
 
 /** How one option is offered on the page. */
@@ -365,6 +387,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const site = Aglyn.useSite()
     const siteFetch = Aglyn.useSiteFetch()
     const { hostId } = site
+    // Prices in the shopper's currency (AGL-4248), once the store answers;
+    // the cached page and its structured data stay in the store currency.
+    const shopper = useShopperCurrency()
 
     // The single-product ("buy now") path returns the shopper to this page
     // rather than to the cart, so the PDP is the second of the two surfaces
@@ -554,6 +579,12 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       typeof variant?.priceUsd === 'number'
         ? Math.round(variant.priceUsd * 100) + pageAddOns.extraCents
         : 0
+    // The same unit in the shopper's currency, as the cart and checkout price it.
+    const shopperUnitMinor =
+      resolved && typeof variant?.priceUsd === 'number'
+        ? shopper.variantMinor(variant) +
+          productPageAddOnsMinor(resolved, addOns, variant.id, shopper.amountMinor)
+        : 0
     const addOnsKey = CommerceModel.modifierSelectionKey(addOns)
 
     // The day to send with this variant: only when it asks for one and the
@@ -664,6 +695,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             ...(shipPostal.trim() && !fulfillment.request ? { shippingPostalCode: shipPostal.trim() } : {}),
             // Where and when, never the fee (AGL-3624).
             ...(fulfillment.request ? { fulfillment: fulfillment.request } : {}),
+            // The currency the shopper sees (AGL-4248), a request: the server
+            // charges in it only where the store sells in it.
+            ...(shopper.ready ? { currency: shopper.code } : {}),
             // The server resolves this against the discounts hub first and the
             // legacy coupons second, and refuses a code it cannot apply with a
             // reason — never a silent full-price charge.
@@ -959,7 +993,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             <Typography variant="h6">
               {/* The configured unit (AGL-4100): the variant and its add-ons, formatted. */}
               {priced
-                ? `${money(unitCents)}${subscribing ? intervalSuffix : ''}`
+                ? `${shopper.format(shopperUnitMinor)}${subscribing ? intervalSuffix : ''}`
                 : PRICE_COMING_SOON_LABEL}
             </Typography>
             {subscribing && subscription?.trialDays ? (
@@ -974,7 +1008,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                   color="text.secondary"
                   sx={{ textDecoration: 'line-through' }}
                 >
-                  {moneyFromUsd(variant.compareAtPriceUsd)}
+                  {shopper.formatVariant({ priceUsd: variant.compareAtPriceUsd })}
                 </Typography>
                 <Chip label="Sale" size="small" color="primary" />
               </>
@@ -1006,10 +1040,10 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               sx={{ mb: 2 }}
             >
               <ToggleButton value="once">
-                {priced ? `One-time ${money(unitCents)}` : 'One-time'}
+                {priced ? `One-time ${shopper.format(shopperUnitMinor)}` : 'One-time'}
               </ToggleButton>
               <ToggleButton value="subscribe">
-                {priced ? `Subscribe ${money(unitCents)}${intervalSuffix}` : 'Subscribe'}
+                {priced ? `Subscribe ${shopper.format(shopperUnitMinor)}${intervalSuffix}` : 'Subscribe'}
               </ToggleButton>
             </ToggleButtonGroup>
           ) : null}
@@ -1028,7 +1062,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 variantId={variant?.id}
                 value={addOns}
                 onChange={setAddOns}
-                formatCents={money}
+                formatCents={shopper.formatBaseCents}
+                formatAddOn={shopper.formatAddOn}
+                formatVariant={shopper.formatVariant}
                 unpricedLabel={PRICE_COMING_SOON_LABEL}
                 disabled={Boolean(variant?.soldOut)}
               />
@@ -1081,7 +1117,8 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 variantId={variant?.id}
                 value={addOns}
                 onChange={setAddOns}
-                formatCents={money}
+                formatCents={shopper.formatBaseCents}
+                formatAddOn={shopper.formatAddOn}
                 disabled={Boolean(variant?.soldOut)}
               />
             </Suspense>
@@ -1184,8 +1221,8 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             <Box sx={{ mb: 2 }} aria-live="polite">
               <Typography variant="subtitle1" component="p">
                 {quantity > 1
-                  ? `Total for ${quantity}: ${money(unitCents * quantity)}`
-                  : `Total: ${money(unitCents)}`}
+                  ? `Total for ${quantity}: ${shopper.format(shopperUnitMinor * quantity)}`
+                  : `Total: ${shopper.format(shopperUnitMinor)}`}
               </Typography>
               {!pageAddOns.ready && pageAddOns.error && !variant?.soldOut ? (
                 <Typography variant="body2" color="text.secondary">
@@ -1210,7 +1247,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                   quantity,
                   ready: pageAddOns.ready,
                   problem: pageAddOns.ready ? undefined : pageAddOns.error,
-                  total: priced ? money(unitCents * quantity) : undefined,
+                  total: priced ? shopper.format(shopperUnitMinor * quantity) : undefined,
                 }}
                 label={mockupLabel}
                 priced={priced}
@@ -1254,7 +1291,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             <Box sx={{ mb: 2 }}>
               <CartFulfillmentChoice
                 state={fulfillment}
-                formatCents={money}
+                formatCents={shopper.formatBaseCents}
               />
             </Box>
           ) : null}
