@@ -48,6 +48,8 @@ jest.mock('../components/media/media-library.component', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => ({}),
+  // The provider's own upload (a CRM call recording) signs as this user.
+  useUser: () => ({ data: null }),
   // A site with an org, so the dialog shows both libraries behind its tabs.
   useHostOrgId: () => 'org-1',
 }))

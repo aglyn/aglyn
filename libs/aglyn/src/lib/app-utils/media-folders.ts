@@ -301,3 +301,29 @@ export function planLegacyFolderMigration(
     assignments,
   }
 }
+
+/**
+ * How much of a folder path by NAME already exists: the deepest folder found,
+ * and the names still to create under it.
+ *
+ * Names match the way the sibling check does — trimmed, any case — so
+ * `['CRM', 'Calls']` finds a "crm" folder a person made by hand rather than
+ * making a second one beside it.
+ */
+export function resolveMediaFolderPath(
+  path: readonly string[],
+  folders: Array<AglynMediaFolder & { $id: string }>,
+): { parentId: string | null; missing: string[] } {
+  let parentId: string | null = null
+  for (let index = 0; index < path.length; index += 1) {
+    const target = path[index].trim().toLowerCase()
+    const found = folders.find(
+      (folder) =>
+        (folder.parentId ?? null) === parentId &&
+        folder.name.trim().toLowerCase() === target,
+    )
+    if (!found) return { parentId, missing: path.slice(index).map((name) => name.trim()) }
+    parentId = found.$id
+  }
+  return { parentId, missing: [] }
+}
