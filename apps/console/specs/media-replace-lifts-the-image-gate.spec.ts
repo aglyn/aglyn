@@ -289,6 +289,7 @@ jest.mock('../utils/server/media-scope', () => ({
   folderStoragePath: async () => '',
   mediaObjectPath: () => MOCK_MASTER,
   mediaCdnPathUpdate: () => '/api/media/cdn/org:org-1/media-1',
+  mediaCdnPathCreateField: () => ({ cdnPath: '/api/media/cdn/org:org-1/media-1' }),
   scopeAllows: () => true,
 }))
 

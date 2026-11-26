@@ -486,3 +486,21 @@ export function mediaCdnPathUpdate(options: {
     ? `/api/media/cdn/${options.cdnScope}/${options.mediaId}`
     : firebaseAdmin.firestore.FieldValue.delete()
 }
+
+/**
+ * `cdnPath` for a document being CREATED: the field when the asset gets one,
+ * else nothing at all.
+ *
+ * {@link mediaCdnPathUpdate} answers a delete sentinel when the asset gets no
+ * path, which is right for an update and refused by Firestore inside a plain
+ * `set()` or `create()` ("FieldValue.delete() must appear at the top-level
+ * and can only be used in update() or set() with {merge:true}"). Every ingress
+ * route writing a new document spreads this instead, so a private upload, or
+ * one on a plan without the CDN, is stored rather than answered with a 500.
+ */
+export function mediaCdnPathCreateField(
+  options: Parameters<typeof mediaCdnPathUpdate>[0],
+): { cdnPath?: string } {
+  const value = mediaCdnPathUpdate(options)
+  return typeof value === 'string' ? { cdnPath: value } : {}
+}
