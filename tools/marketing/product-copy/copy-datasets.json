@@ -248,7 +248,7 @@
     {
       "section": "deep-dive (third item)",
       "phrase": "Search — Records reachable through a published repeatable are indexed by your site’s search.",
-      "concern": "RESOLVED by cutting it. Site search keeps no index of records: `apps/tenant/utils/search-content.ts` scans at most `DATASET_RECORD_SCAN_LIMIT` (50) records per reachable dataset per query and returns at most 5 rows from each, so a record past the first 50 is never found. Replaced by 'Limit' (`repeatLimit`, capped at `REPEAT_MAX_RECORDS`)."
+      "concern": "RESOLVED by cutting it. Site search keeps no index of records: `libs/tenant/runtime/src/lib/site-search.ts` scans at most `DATASET_RECORD_SCAN_LIMIT` (50) records per reachable dataset per query and returns at most 5 rows from each, so a record past the first 50 is never found. Replaced by 'Limit' (`repeatLimit`, capped at `REPEAT_MAX_RECORDS`)."
     },
     {
       "section": "capabilities (card 4) + early-access (stat 4)",

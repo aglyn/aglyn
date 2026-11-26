@@ -50,8 +50,8 @@ jest.mock('../app/[host]/host-data', () => ({
 // The REAL facet arithmetic — only the Firestore-backed read is doubled.
 // Mocking `searchResultFacets` here would leave this suite asserting its own
 // stub's call order and nothing about the page.
-jest.mock('../utils/search-content', () => {
-  const actual = jest.requireActual('../utils/search-content')
+jest.mock('@aglyn/tenant-runtime/site-search', () => {
+  const actual = jest.requireActual('@aglyn/tenant-runtime/site-search')
   return {
     __esModule: true,
     ...actual,
@@ -83,8 +83,8 @@ jest.mock('../utils/site-preview-viewer', () => ({
   sitePreviewViewer: jest.fn(async () => ({ admitted: false, via: null })),
 }))
 
-import type { SearchResult } from '../utils/search-content'
-import searchContent from '../utils/search-content'
+import type { SearchResult } from '@aglyn/tenant-runtime/site-search'
+import searchContent from '@aglyn/tenant-runtime/site-search'
 import { getHostCached } from '../app/[host]/host-data'
 import SearchPage from '../app/[host]/[scheme]/search/page'
 import { sitePreviewViewer } from '../utils/site-preview-viewer'
