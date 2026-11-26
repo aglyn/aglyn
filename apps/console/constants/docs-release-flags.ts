@@ -422,6 +422,17 @@ export const FLAG_DOC_PAGES: Partial<
   // AGL-4140. The flag shows YouTube's own thumbnail as the poster of a
   // YouTube film with none. The Video page covers every way the element
   // plays a film, so it discloses beside the one section about it.
+  // The AI chat on a published site (AGL-4250): its own page, which opens
+  // with the rolling-out admonition before the plan admonition.
+  release_ai_site_chat: [
+    {
+      path: 'docs/ai/site-chat.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: false,
+      priceClaimNote:
+        'The page names the plans the chat is included on and the site-chat credit allotments, which hold whether or not the flag is on; it states no price.',
+    },
+  ],
   release_video_embed_posters: [
     {
       path: 'docs/building-sites/besigner/video.md',

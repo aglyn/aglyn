@@ -507,6 +507,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'scheme-guard',
     why: "A FOURTH raw-CSS surface, never in the issue's inventory: a marketplace plugin's own stylesheet, rendered unlayered into the published document. registerPluginStyles and capturePluginStyles both run sanitizeAuthorCss, so it carries the same scheme rule — but the actor pair is AGL-1701 case #4 (a publisher's host in front of another org's visitors), not this issue's.",
   },
+  'libs/plugins/ai/src/lib/components/site-chat-panel.tsx': {
+    markers: 1,
+    guard: 'projection',
+    why: 'A card photo in the AI chat panel (AGL-4250): a product, stay or listing image the server resolved with resolveMediaSrc for the site the chat answers on (commerce site-chat-tools.ts, ai site-chat-platform.ts candidates), from the photo the merchant set on that product or stay. The model never writes a card: cards come only from the site\'s own tools and search sources.',
+  },
   'libs/plugins/commerce/src/lib/components/cart.tsx': {
     markers: 1,
     guard: 'media-ref',

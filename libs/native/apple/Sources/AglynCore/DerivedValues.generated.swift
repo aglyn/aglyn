@@ -136,5 +136,6 @@ public enum ReleaseFlagDefaults {
     "release_ad_audience_sync": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
     "release_site_starters": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
     "release_video_embed_posters": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
+    "release_ai_site_chat": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
   ]
 }

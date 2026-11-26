@@ -54,6 +54,7 @@ export type ReleaseFlagKey =
   | 'release_ad_audience_sync'
   | 'release_site_starters'
   | 'release_video_embed_posters'
+  | 'release_ai_site_chat'
 
 export interface ReleaseFlagDefinition {
   key: ReleaseFlagKey
@@ -370,6 +371,19 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'own thumbnail (AGL-4140), which each visitor\u2019s browser loads from ' +
       'i.ytimg.com with the page. OFF by default: nothing is requested from ' +
       'Google until the Subprocessors page that discloses it is published.',
+    defaultEnabled: false,
+  },
+  // Per org (AGL-4250): the site chat door, its page enricher and the
+  // owner's settings and conversations answer 404 for a workspace the flag
+  // is off for (staff preview the console half).
+  {
+    key: 'release_ai_site_chat',
+    label: `${PLATFORM_BRAND_NAME} AI chat on published sites`,
+    description:
+      'An AI chat on a published site answering visitors from its own pages, ' +
+      'products and listings (AGL-4250), Starter and up, billed to the ' +
+      'workspace\u2019s AI credits under a site-chat allotment. OFF by ' +
+      'default: no site shows it until it is on for its workspace.',
     defaultEnabled: false,
   },
 ]

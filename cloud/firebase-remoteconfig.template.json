@@ -216,6 +216,13 @@
       },
       "description": "A YouTube film with no poster shows YouTube's own thumbnail, loaded by each visitor's browser from i.ytimg.com (AGL-4140). OFF until the Subprocessors page disclosing it is published.",
       "valueType": "JSON"
+    },
+    "release_ai_site_chat": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "An AI chat on a published site answering visitors from its own pages, products and listings (AGL-4250), Starter and up. OFF by default; turned on per workspace.",
+      "valueType": "JSON"
     }
   },
   "version": {

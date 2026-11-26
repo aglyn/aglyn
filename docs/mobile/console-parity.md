@@ -83,6 +83,7 @@ too. The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Forms, bookings, events, redirects, automations: form settings, metrics and preview, page import and export, test a path, element picker (gap sweep) | `forms`, `bookings`, `events-calendar`, `redirects`, `workflows` | AGL-3668 | [ ] | [ ] |
 | Integrations: help desks card, every Zapier event (gap sweep) | `help-desks`, `zapier` | AGL-3668 | [ ] | [ ] |
 | AI in every plugin zone and the Assist dock (gap sweep) | `ai` zones on themes, sites, media, CRM, email, automations, funnels, logic, products, marketing; Assist | AGL-3671 | [ ] | [ ] |
+| AI chat on the published site: its settings card (on/off, greeting, suggested questions, opening message, what it may do, pages, button side, monthly cap, hand-off), this month's figures and the visitors' conversations with their hand-offs (`hostSettings` widget `ai-site-chat-settings`; `/api/ai/site-chat/settings`, `/api/ai/site-chat/conversations`). Web only for now: behind `release_ai_site_chat`, off for every workspace; the native screens follow once a first site runs it | `ai` (AGL-4250) | AGL-4250 | [ ] | [ ] |
 | Staff: plugin staff cards, AI usage columns, build for a client (gap sweep) | `admin/*` slots, `[orgSlug]/client-build` | AGL-3667 in AGL-3671 | [ ] | [ ] |
 
 ### Driven, 2026-10-16 to 2026-10-18

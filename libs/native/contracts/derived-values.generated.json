@@ -2795,6 +2795,11 @@
       "enabled": false,
       "rolloutPercent": 0,
       "plans": []
+    },
+    "release_ai_site_chat": {
+      "enabled": false,
+      "rolloutPercent": 0,
+      "plans": []
     }
   },
   "flagCases": [

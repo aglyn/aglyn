@@ -3001,15 +3001,22 @@
         }
       },
       "package": "@aglyn/plugins-ai",
+      "$comment": "AGL-4250: the AI chat on a published site. `site` registers the chat launcher runtime (`ai-site-chat`), drawn only on a page whose enricher answered an `aiSiteChat` slice; `tenantApi` (its own module, `site-server`) registers that enricher and the visitor's doors `ai/site-chat`, `ai/site-chat/history` and `ai/site-chat/handoff`, never the console's AI doors. The owner's settings and conversations are console doors. Behind the release flag `release_ai_site_chat`, Starter and up, and the site's own switch.",
       "register": {
         "console": "registerAiConsole",
         "staff": "registerAiConsole",
+        "site": "registerAiSite",
+        "tenantApi": "registerAiSiteApi",
         "consoleApi": "registerAiConsoleApi",
         "declarations": "registerAiDeclarations",
         "serverDeclarations": "registerAiServerDeclarations",
         "subprocessors": "aiSubprocessors",
         "planEntitlements": "aiPlanEntitlements",
         "usageAxes": "aiUsageAxes"
+      },
+      "modules": {
+        "site": "site",
+        "tenantApi": "site-server"
       },
       "apiPrefixes": [
         "ai",
@@ -3022,10 +3029,10 @@
         "alwaysOnForWorkspace": true,
         "description": "The assistant, generative building and automation, and the AI add-on.",
         "siteOff": {
-          "stops": "Switching AI off for this site hides the assistant, Create with AI, the AI cards and the editor’s AI controls on this site, refuses every AI request made for it, and stops its queued AI jobs without spending credits.",
+          "stops": "Switching AI off for this site hides the assistant, Create with AI, the AI cards and the editor’s AI controls on this site, removes the AI chat from its published pages, refuses every AI request made for it, and stops its queued AI jobs without spending credits.",
           "keeps": "It does not stop the workspace’s AI add-on, credits, allotments or overage billing, and AI keeps working on the workspace’s other sites."
         },
-        "publishedSiteImpact": "console-only"
+        "publishedSiteImpact": "elements"
       },
       "orgCollections": [
         {
@@ -3051,12 +3058,18 @@
         }
       ],
       "contributes": {
+        "site": {
+          "features": [
+            "ai-site-chat"
+          ]
+        },
         "console": {
           "shell": true,
           "routes": [
             "/ai-jobs"
           ],
           "slots": [
+            "hostSettings",
             "consoleDock",
             "consoleTopBar",
             "automationEditor",

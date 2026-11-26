@@ -829,6 +829,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/site-backup-and-packages',
     title: 'Site backup and packages',
   },
+  siteChat: {
+    path: '/ai/site-chat',
+    title: 'AI chat on your site',
+  },
   siteLooks: {
     path: '/ai/site-looks',
     title: 'Looks and themes for AI sites',
@@ -1198,6 +1202,7 @@ export const DOCS_HELP_ANCHORS = {
   shipWithYourOwnEasyshipSendcloudOrShipperhq: ['#before-you-start', '#connect-an-account', '#easyship', '#sendcloud', '#shipperhq', '#tracking-webhooks', '#what-changes', '#disconnect', '#troubleshooting', '#related'],
   showToSignedInVisitors: ['#choose-who-sees-an-element', '#what-visitors-see'],
   siteBackupAndPackages: ['#backup-and-restore-card', '#what-a-package-carries', '#download-a-backup', '#export-items', '#import-a-package', '#1-upload', '#2-items', '#3-missing-items', '#4-changes', '#5-review', '#6-import', '#undo-an-import', '#moving-a-site-to-another-of-your-sites'],
+  siteChat: ['#set-up-the-chat', '#what-the-chat-may-do', '#pages', '#conversations', '#credits-and-limits', '#how-the-chat-loads', '#privacy', '#related'],
   siteLooks: ['#choose-a-style', '#each-styles-layout', '#an-ai-starters-look', '#how-the-look-is-made', '#your-theme-afterwards', '#change-the-look-later', '#related'],
   siteProtection: ['#where-these-controls-live', '#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
   siteSearch: ['#how-it-works', '#what-it-searches', '#the-layout-built-in-pages-use', '#configure-it', '#related'],

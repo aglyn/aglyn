@@ -327,6 +327,8 @@ const PLUGIN_TOPICS = {
   webhooks: '/marketing-and-automation/workflows-and-actions/webhooks',
   // The Live chat card on a site's setup page (AGL-3698).
   liveChat: '/building-sites/live-chat',
+  // The AI chat card on a site's setup page (AGL-4250).
+  aiSiteChat: '/ai/site-chat',
   // The domains plugin's Get a domain card on the Custom Domain page
   // (AGL-3962).
   // The Verify with ChatGPT card on a site's Setup → SEO page, which the

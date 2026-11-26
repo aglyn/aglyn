@@ -234,6 +234,7 @@ export const DOCS_HELP_EXCERPTS = {
   shipWithYourOwnEasyshipSendcloudOrShipperhq: 'Connect your own Easyship or Sendcloud account to get rates and buy labels there, billed to you by that service, or ShipperHQ to price checkout shipping with your own rules. Rolling out.',
   showToSignedInVisitors: 'Show an element only to visitors who are signed in to your site\'s account, or only to those who are not — "Sign in" for visitors and "Account" for members.',
   siteBackupAndPackages: 'Download a site or the items you pick as one package, import one into any of your sites, compare each item with the site\'s copy and choose how to handle it before anything is written, and undo an import.',
+  siteChat: 'An Aglyn AI chat on your published site that answers visitors from your own pages and products, shows product cards, and adds to the cart or books only when the visitor confirms. Rolling out.',
   siteLooks: 'How a site started with AI gets its look: the style you choose sets the range of themes, colors, fonts and buttons, and every site gets its own readable variation, saved as a theme you can edit.',
   siteProtection: 'Password-protect pages, design custom error pages, and put your site in maintenance mode.',
   siteSearch: 'Let visitors search your site\'s pages, blog entries, products and dataset records with a built-in search page.',
