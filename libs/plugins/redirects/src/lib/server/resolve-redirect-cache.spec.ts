@@ -81,8 +81,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
                 // ref is rebuilt from the id because a DocumentReference
                 // cannot survive the cache's JSON round trip.
                 doc: (id: string) => docStub(id, {}).ref,
-                where: () => ({
-                  limit: () => ({
+                // The walk (AGL-4247): where → orderBy → limit → get, one
+                // short page here, so it stops after a single read.
+                where: () => {
+                  const query = {
+                    orderBy: () => query,
+                    startAfter: () => query,
+                    limit: () => query,
                     get: async () => {
                       reads.push(name)
                       return {
@@ -92,8 +97,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
                         ),
                       }
                     },
-                  }),
-                }),
+                  }
+                  return query
+                },
               }
             },
           }),
