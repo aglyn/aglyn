@@ -95,6 +95,13 @@ export interface ShippingRate {
   tiers?: ShippingTier[]
   /** carrier: the live rate's options (AGL-3612). */
   carrier?: CarrierRateSettings
+  /**
+   * flat + free_over: the price in another currency the store sells in
+   * (AGL-4248), minor units keyed by ISO code. A currency not listed converts.
+   */
+  amountsByCurrency?: Record<string, number>
+  /** free_over: the threshold in another currency (AGL-4248), minor units by ISO code. */
+  freeOverByCurrency?: Record<string, number>
 }
 
 export interface ShippingSettings {

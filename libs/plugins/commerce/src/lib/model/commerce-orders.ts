@@ -468,6 +468,23 @@ export interface HostOrder {
   /** Human order number, sequential per host (e.g. #1042). */
   number?: number
   /**
+   * The currency the shopper paid in (AGL-4248), lower case as Stripe
+   * writes it: every amount on the order, `totals` and lines included, is in
+   * it. Absent on orders from before multi-currency, which are in the store
+   * currency.
+   */
+  currency?: string
+  /** The store's own currency when the shopper paid in another (AGL-4248), lower case. */
+  baseCurrency?: string
+  /** Units of `currency` per unit of `baseCurrency` the order was priced at, before any buffer. */
+  fxRate?: number
+  /**
+   * `totals` in the store currency (AGL-4248), at `fxRate`, for the
+   * merchant's reports. What Stripe actually settled can differ by its own
+   * conversion; the payout report is the record of that.
+   */
+  baseTotals?: OrderTotals
+  /**
    * The distinct use days its lines name (`OrderLineItem.useDayKey`,
    * AGL-4043), stamped by every creator through `withOrderListFields` so the
    * window finds a pass bought ahead on the day it is for. Absent when no
