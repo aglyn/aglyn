@@ -36,6 +36,7 @@ import { stripeIdIsTestMode } from '@aglyn/aglyn/app-utils/stripe-deployment-mod
 import type { PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import type { ProductType } from './commerce'
 import { isCheckInDayKey } from './commerce-check-in-product'
+import { formatOrderMoney } from './buyer-notifications'
 import type { StorefrontTaxMode } from './commerce-tax-decision'
 import { lineRequiresShipping, orderLineFulfillmentStates } from './order-fulfillment'
 import type { OrderPayment } from './commerce-pos'
@@ -467,6 +468,23 @@ export interface OrderHardwareBuyer {
 export interface HostOrder {
   /** Human order number, sequential per host (e.g. #1042). */
   number?: number
+  /**
+   * The currency the shopper paid in (AGL-4248), lower case as Stripe
+   * writes it: every amount on the order, `totals` and lines included, is in
+   * it. Absent on orders from before multi-currency, which are in the store
+   * currency.
+   */
+  currency?: string
+  /** The store's own currency when the shopper paid in another (AGL-4248), lower case. */
+  baseCurrency?: string
+  /** Units of `currency` per unit of `baseCurrency` the order was priced at, before any buffer. */
+  fxRate?: number
+  /**
+   * `totals` in the store currency (AGL-4248), at `fxRate`, for the
+   * merchant's reports. What Stripe actually settled can differ by its own
+   * conversion; the payout report is the record of that.
+   */
+  baseTotals?: OrderTotals
   /**
    * The distinct use days its lines name (`OrderLineItem.useDayKey`,
    * AGL-4043), stamped by every creator through `withOrderListFields` so the
@@ -1237,7 +1255,8 @@ export function computeBuyNowOrder(
   return {
     lineItems,
     totals: computeCheckoutSessionTotals(lineItems, session, {
-      feeCents: metadataCents(metadata.feeCents),
+      // The take as charged when the sale was in another currency (AGL-4248).
+      feeCents: metadataCents(metadata.chargeFeeCents ?? metadata.feeCents),
       lineItemTaxCents,
       pricedInDiscountCents,
     }),
@@ -1825,16 +1844,18 @@ export function orderRefundSummary(order: Partial<HostOrder>): string {
   if (state === 'none') return ''
   const refundedCents = Math.max(0, Number(order.refundedCents ?? 0))
   const totalCents = order.totals?.totalCents ?? Number(order.amountCents ?? 0)
-  if (state === 'full') return `Refunded in full ($${usd(refundedCents)})`
+  // In the currency it was paid in (AGL-4248); a USD order reads as before.
+  const currency = String(order.currency ?? 'usd').toUpperCase()
+  const money = (cents: number) =>
+    currency === 'USD' ? `$${usd(cents)}` : formatOrderMoney(cents, currency)
+  if (state === 'full') return `Refunded in full (${money(refundedCents)})`
   const revoked = (order.refundedLineItemIds ?? []).length
   const lines = (order.lineItems ?? []).length
   const scope =
     revoked > 0
       ? `${revoked} of ${lines} line${lines === 1 ? '' : 's'} withdrawn`
       : 'no lines withdrawn — refunded by amount'
-  return `Partially refunded ($${usd(refundedCents)} of $${usd(
-    totalCents,
-  )}) — ${scope}`
+  return `Partially refunded (${money(refundedCents)} of ${money(totalCents)}) — ${scope}`
 }
 
 /** `12345` -> `123.45`, the CSV's money format. */

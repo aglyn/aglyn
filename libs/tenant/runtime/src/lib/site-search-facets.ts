@@ -17,11 +17,11 @@
 
 /**
  * The shape and the arithmetic of site-search results (AGL-1525) — the half
- * of `search-content.ts` that the `'use client'` results page needs.
+ * of `site-search.ts` that the `'use client'` results page needs.
  *
  * Split into its own file for a reason a type-only import would not have
  * caught: the component reads `SEARCH_FACET_ALL`, a VALUE, and importing a
- * value from `search-content` puts that module in the client graph. It
+ * value from `site-search` puts that module in the client graph. It
  * imports `@aglyn/tenant-data-admin`, so the browser bundle started pulling
  * firebase-admin and `@google-cloud/storage` behind it and the production
  * build died on `Can't resolve 'child_process'` — 76 errors, none of which

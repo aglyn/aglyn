@@ -24,6 +24,7 @@ import {
   newMediaFolderDoc,
   normalizeFolderName,
   planLegacyFolderMigration,
+  resolveMediaFolderPath,
   wouldCreateCycle,
 } from './media-folders'
 import { ORG_SCOPE_TOKEN } from './scope-tokens'
@@ -275,5 +276,28 @@ describe('mediaFolderChoices', () => {
       { $id: 'b', name: 'B', parentId: 'a' },
     ])
     expect(choices.map((choice) => choice.$id).sort()).toEqual(['a', 'b'])
+  })
+})
+
+describe('resolveMediaFolderPath', () => {
+  const folders = [
+    { $id: 'crm', name: 'crm ', parentId: null },
+    { $id: 'other', name: 'Calls', parentId: null },
+  ] as Array<AglynMediaFolder & { $id: string }>
+
+  it('finds a folder a person made by hand, in any case, rather than making a second', () => {
+    expect(resolveMediaFolderPath(['CRM'], folders)).toEqual({ parentId: 'crm', missing: [] })
+  })
+
+  it('names what is still to make, under the deepest folder found', () => {
+    // A root "Calls" is not CRM / Calls.
+    expect(resolveMediaFolderPath(['CRM', 'Calls'], folders)).toEqual({
+      parentId: 'crm',
+      missing: ['Calls'],
+    })
+    expect(resolveMediaFolderPath(['CRM', 'Calls'], [])).toEqual({
+      parentId: null,
+      missing: ['CRM', 'Calls'],
+    })
   })
 })

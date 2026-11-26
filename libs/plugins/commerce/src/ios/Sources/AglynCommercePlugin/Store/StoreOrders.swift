@@ -25,6 +25,13 @@ func ordersPath(_ hostID: String) -> [String] { ["hosts", hostID, "orders"] }
 struct OrderRow: Identifiable, Hashable {
   let id: String
   let order: HostOrder
+  /// The store's own currency (`settings/store.currency`), which an order from before multi-currency is in.
+  var storeCurrency = "USD"
+
+  /// The currency every amount on this order is in (AGL-4248).
+  var currency: String { orderCurrency(order, storeCurrency: storeCurrency) }
+  /// An amount on this order, in its currency.
+  func money(_ cents: Int) -> String { formatOrderMoney(cents, currency: currency) }
 
   var number: String { formatOrderNumber(order, docId: id) }
   var status: OrderStatus { order.status ?? .pending }
@@ -36,9 +43,44 @@ struct OrderRow: Identifiable, Hashable {
     return email.isEmpty ? "Guest" : email
   }
   var totalCents: Int { Int((order.totals?.totalCents ?? order.amountCents ?? 0).rounded()) }
-  var total: String { formatOrderMoney(totalCents) }
+  var total: String { money(totalCents) }
+  /// The total with the store-currency total beside it when the order was paid in another currency.
+  var totalWithBase: String { orderTotalText(order, storeCurrency: storeCurrency) }
   var createdAt: Date? { order.createdAtMs.map { Date(timeIntervalSince1970: $0 / 1000) } }
   var itemCount: Int { (order.lineItems ?? []).reduce(0) { $0 + max(0, Int($1.quantity)) } }
+}
+
+/// The currency every amount on an order is in (AGL-4248), upper case: the one the shopper paid in, else the store's
+/// own (orders from before multi-currency carry none).
+func orderCurrency(_ order: HostOrder, storeCurrency: String) -> String {
+  let paid = order.currency?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+  let store = storeCurrency.trimmingCharacters(in: .whitespacesAndNewlines)
+  return (paid.isEmpty ? (store.isEmpty ? "USD" : store) : paid).uppercased()
+}
+
+/// An order's total, and beside it the store-currency total when the shopper paid in another currency (AGL-4248):
+/// `NZ$141.00 (US$82.94)`. A US dollar beside another currency says which dollar it is, as the shopper's money does.
+func orderTotalText(_ order: HostOrder, storeCurrency: String) -> String {
+  let currency = orderCurrency(order, storeCurrency: storeCurrency)
+  let total = formatOrderMoney(Int((order.totals?.totalCents ?? order.amountCents ?? 0).rounded()), currency: currency)
+  let base = (order.baseCurrency ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+  guard !base.isEmpty, base != currency, let baseCents = order.baseTotals?.totalCents else { return total }
+  var baseText = formatOrderMoney(Int(baseCents.rounded()), currency: base)
+  if base == "USD", baseText.hasPrefix("$") { baseText = "US" + baseText }
+  if base == "USD", baseText.hasPrefix("-$") { baseText = "-US" + baseText.dropFirst() }
+  return "\(total) (\(baseText))"
+}
+
+/// The store's currency, live (`settings/store.currency`, USD when unset), upper case.
+@MainActor
+func listenStoreCurrency(
+  _ reader: FirestoreReader, hostID: String, onChange: @escaping @MainActor (String) -> Void
+) -> FirestoreListening {
+  reader.listenDocument(["hosts", hostID, "settings", "store"]) { result in
+    var currency = "USD"
+    if case .success(let doc?) = result, let stored = doc.string("currency"), !stored.isEmpty { currency = stored.uppercased() }
+    onChange(currency)
+  }
 }
 
 func orderStatusLabel(_ status: OrderStatus) -> String {
@@ -133,6 +175,10 @@ func ordersPlan(_ filter: OrderFilter, search: String, clauses: [ListFilterReque
 @Observable
 final class OrdersModel {
   private(set) var rows: [OrderRow] = []
+  /// The store's own currency, which an order from before multi-currency is in.
+  private(set) var storeCurrency = "USD" {
+    didSet { if oldValue != storeCurrency { rows = rows.map { var row = $0; row.storeCurrency = storeCurrency; return row } } }
+  }
   private(set) var ready = false
   private(set) var failed = false
   private(set) var notice: String?
@@ -149,11 +195,14 @@ final class OrdersModel {
   @ObservationIgnored private var reader: FirestoreReader?
   @ObservationIgnored private var hostID: String?
   @ObservationIgnored private var listener: FirestoreListening?
+  @ObservationIgnored private var currencyListener: FirestoreListening?
   @ObservationIgnored private var limit = ordersPageSize
 
   func start(_ reader: FirestoreReader, hostID: String?) {
     self.reader = reader
     self.hostID = hostID
+    currencyListener?.remove()
+    currencyListener = hostID.map { listenStoreCurrency(reader, hostID: $0) { [weak self] in self?.storeCurrency = $0 } }
     restart()
   }
 
@@ -166,6 +215,8 @@ final class OrdersModel {
   func stop() {
     listener?.remove()
     listener = nil
+    currencyListener?.remove()
+    currencyListener = nil
   }
 
   private func restart() {
@@ -189,7 +240,9 @@ final class OrdersModel {
       switch result {
       case .success(let docs):
         self.hasMore = docs.count > window
-        self.rows = docs.prefix(window).filter { !isUnpaidQuote($0) }.map { OrderRow(id: $0.id, order: decodeOrder($0)) }
+        self.rows = docs.prefix(window).filter { !isUnpaidQuote($0) }.map {
+          OrderRow(id: $0.id, order: decodeOrder($0), storeCurrency: self.storeCurrency)
+        }
       case .failure:
         self.failed = true
       }
@@ -203,27 +256,32 @@ final class OrdersModel {
 @Observable
 final class OrderModel {
   private(set) var row: OrderRow?
+  /// The store's own currency, which an order from before multi-currency is in.
+  private(set) var storeCurrency = "USD" { didSet { if oldValue != storeCurrency { row?.storeCurrency = storeCurrency } } }
   /// The order as stored, for what reads it field by field (a register sale's receipt).
   @ObservationIgnored private(set) var raw: [String: Any] = [:]
   private(set) var ready = false
   private(set) var missing = false
   private(set) var failed = false
   @ObservationIgnored private var listener: FirestoreListening?
+  @ObservationIgnored private var currencyListener: FirestoreListening?
 
   func start(_ reader: FirestoreReader, hostID: String?, orderID: String) {
     listener?.remove()
+    currencyListener?.remove()
     ready = false
     guard let hostID, !orderID.isEmpty else {
       missing = true
       ready = true
       return
     }
+    currencyListener = listenStoreCurrency(reader, hostID: hostID) { [weak self] in self?.storeCurrency = $0 }
     listener = reader.listenDocument(ordersPath(hostID) + [orderID]) { [weak self] result in
       guard let self else { return }
       switch result {
       case .success(let doc?):
         self.raw = doc.data
-        self.row = OrderRow(id: doc.id, order: decodeOrder(doc))
+        self.row = OrderRow(id: doc.id, order: decodeOrder(doc), storeCurrency: self.storeCurrency)
         self.missing = false
       case .success(nil): self.missing = true
       case .failure: self.failed = true
@@ -235,6 +293,8 @@ final class OrderModel {
   func stop() {
     listener?.remove()
     listener = nil
+    currencyListener?.remove()
+    currencyListener = nil
   }
 }
 

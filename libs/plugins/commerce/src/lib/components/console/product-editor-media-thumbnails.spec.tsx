@@ -33,6 +33,8 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change', () =>
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => mockUser,
+  // The editor's product traffic card (AGL-4253) asks the plan; unknown, it draws nothing.
+  useOrgPlan: () => ({ org: null, ready: false }),
   useFirestore: () => mockFirestore,
   useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
   useHostResourceApi: () => mockCreate,
