@@ -93,7 +93,7 @@ export function kioskCartLine(
   choice: PosItemChoice,
 ): KioskCartLine {
   const variant = product.variants.find((candidate) => candidate.id === choice.variant.id) ?? product.variants[0]!
-  // Priced and named as the order will name them: a write-in with its answer (the gear set builder).
+  // Priced and named as the order will name them: a write-in with its answer (write-ins).
   const picked = CommerceModel.soldLineModifiers(product, choice.modifiers, variant.id)
   const label = CommerceModel.lineLabelWithModifiers(
     Object.keys(variant.options).length ? Object.values(variant.options).join(' / ') : undefined,

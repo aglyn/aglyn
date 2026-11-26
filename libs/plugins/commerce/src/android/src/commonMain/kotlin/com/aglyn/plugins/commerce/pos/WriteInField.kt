@@ -13,7 +13,7 @@ import com.aglyn.contracts.ModifierSelection
 import com.aglyn.contracts.ProductModifierGroup
 
 /**
- * One write-in at the register or the kiosk (the gear set builder), as the console's `ProductWriteInField`: a text field
+ * One write-in at the register or the kiosk (write-ins), as the console's `ProductWriteInField`: a text field
  * named after the group, with the merchant's note, what a filled answer adds and a count of characters under it, or
  * what is wrong with what was typed. Digits only opens the number pad; the field stops at the group's length.
  */

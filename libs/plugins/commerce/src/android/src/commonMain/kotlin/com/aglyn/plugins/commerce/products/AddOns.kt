@@ -24,8 +24,8 @@ import kotlin.uuid.Uuid
  * and costing more on a larger size where the product has sizes. A group is
  * offered at the register always, and on the product's page on the website
  * when "Show on the website" is on, which a new group starts with. A
- * write-in (the gear set builder) asks the customer to type an answer, such
- * as the name and number for a jersey: one choice names and prices it.
+ * write-in (write-ins) asks the customer to type an answer, such
+ * as a name to print, an engraving or a cake message: one choice names and prices it.
  *
  * A draft keeps prices as typed. On save each group and choice is written over
  * its stored record, so what the apps do not edit (a choice's picture, its
@@ -63,13 +63,13 @@ data class AddOnGroupDraft(
   val max: Int = 1,
   val online: Boolean? = null,
   val choices: List<AddOnChoiceDraft> = emptyList(),
-  /** `"text"` makes the group a write-in (the gear set builder): one field the customer types into. */
+  /** `"text"` makes the group a write-in (write-ins): one field the customer types into. */
   val kind: String? = null,
   /** A write-in's longest answer, 1 to 40 characters. */
   val maxLength: Int? = null,
-  /** A write-in that takes numbers only, such as a race number. */
+  /** A write-in that takes numbers only, such as a number. */
   val digitsOnly: Boolean? = null,
-  /** Print the group's name before the choice on the order ("Jersey size: M"). */
+  /** Print the group's name before the choice on the order ("Size: M"). */
   val nameOnOrder: Boolean? = null,
 ) {
   /** Whether a pick is required before the item can be added. */
@@ -87,8 +87,8 @@ fun newAddOnGroup(mintId: (String) -> String = ::newAddOnId): AddOnGroupDraft =
   AddOnGroupDraft(id = mintId("g"), online = true, choices = listOf(AddOnChoiceDraft(id = mintId("o"))))
 
 /**
- * A new write-in (the gear set builder), as the console's `newWriteInGroup`: one field the customer types into, such as
- * the name or number for a jersey. Required, shown on the website, free until the merchant sets what it adds.
+ * A new write-in (write-ins), as the console's `newWriteInGroup`: one field the customer types into, such as
+ * a name to print or an engraving. Required, shown on the website, free until the merchant sets what it adds.
  */
 fun newWriteInGroup(mintId: (String) -> String = ::newAddOnId): AddOnGroupDraft = AddOnGroupDraft(
   id = mintId("g"), kind = WRITE_IN_KIND, min = 1, max = 1, maxLength = DEFAULT_WRITE_IN_LENGTH, online = true,
@@ -210,7 +210,7 @@ fun addOnsJson(drafts: List<AddOnGroupDraft>, stored: JsonElement?): JsonArray {
       fields["min"] = JsonPrimitive(group.min.toLong())
       fields["max"] = JsonPrimitive(group.max.toLong())
       group.online?.let { fields["online"] = JsonPrimitive(it) }
-      // A write-in (the gear set builder) and a group named on the order: each kept only when it says something.
+      // A write-in (write-ins) and a group named on the order: each kept only when it says something.
       group.kind?.let { fields["kind"] = JsonPrimitive(it) } ?: fields.remove("kind")
       val writeIn = group.kind == WRITE_IN_KIND
       group.maxLength?.takeIf { writeIn }?.let { fields["maxLength"] = JsonPrimitive(it.toLong()) } ?: fields.remove("maxLength")
@@ -251,6 +251,7 @@ fun variantMatrixProblem(options: List<OptionDraft>): String? {
   val count = variantCountOf(options)
   if (count <= COMMERCE_MAX_VARIANTS) return null
   val shown = count.toString().reversed().chunked(3).joinToString(",").reversed()
-  return "These options make $shown combinations, and a product holds at most $COMMERCE_MAX_VARIANTS. Remove some values, or move " +
-    "choices that don’t need their own stock (walls, printing, extras) to Add-ons, priced by option where they cost more on a larger size."
+  return "These options make $shown combinations, and a product holds at most $COMMERCE_MAX_VARIANTS. Keep as options only " +
+    "what you stock separately, and move the rest to Add-ons: they combine without a limit, can be required, and can cost more on " +
+    "some options. A choice the customer types, such as a name to print, is a write-in."
 }

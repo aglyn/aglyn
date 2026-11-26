@@ -88,7 +88,7 @@ export interface PublicModifierGroup {
   name: string
   min: number
   max: number
-  /** A write-in the shopper types (the gear set builder), with its length and whether it takes numbers only. */
+  /** A write-in the shopper types (write-ins), with its length and whether it takes numbers only. */
   kind?: CommerceModel.ProductModifierGroupKind
   maxLength?: number
   digitsOnly?: boolean

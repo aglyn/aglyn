@@ -334,7 +334,7 @@ struct QuoteEditorStart: Identifiable {
       draftLine.quantity = String(Int(quantity > 0 ? quantity : 1))
       draftLine.modifiers = (line["modifiers"]?.arrayValue ?? []).compactMap { pick in
         guard let group = pick["groupId"]?.stringValue, let option = pick["optionId"]?.stringValue else { return nil }
-        // A write-in's answer from the request (the gear set builder).
+        // A write-in's answer from the request (write-ins).
         return ModifierSelection(groupId: group, optionId: option, text: cleanWriteIn(pick["text"]?.stringValue).nilIfEmpty)
       }
       draftLine.description = line["description"]?.stringValue ?? ""
@@ -691,7 +691,7 @@ struct QuoteEditorSheet: View {
     let variantID = line.wrappedValue.variantID.isEmpty ? nil : line.wrappedValue.variantID
     let chosen = line.wrappedValue.modifiers.filter { $0.groupId == group.id }.map(\.optionId)
     if group.isWriteIn {
-      // A write-in (the gear set builder): the answer the customer gave, typed into the quote.
+      // A write-in (write-ins): the answer the customer gave, typed into the quote.
       let text = line.wrappedValue.modifiers.first { $0.groupId == group.id }?.text ?? ""
       let problem = writeInProblem(group, text)
       VStack(alignment: .leading, spacing: 2) {

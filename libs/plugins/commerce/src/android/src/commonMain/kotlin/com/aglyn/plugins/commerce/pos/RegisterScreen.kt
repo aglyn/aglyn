@@ -653,7 +653,7 @@ private fun ItemSheetContent(model: RegisterModel, sheet: ItemSheet) {
     }
     for (group in item.modifierGroups) {
       if (group.isWriteIn()) {
-        // A write-in (the gear set builder): the cashier types the answer the customer gives.
+        // A write-in (write-ins): the cashier types the answer the customer gives.
         WriteInField(group, item.modifierGroups, variant.id, sheet.picks, { money(it, model.currency) }, "pos-writein-${group.id}") {
           model.sheet = sheet.copy(picks = it, problem = null)
         }

@@ -43,14 +43,14 @@
  * card folds its contents out. Display only: a combo is priced and sold as
  * the one choice it is.
  *
- * WRITE-INS (the gear set builder). A group of `kind: 'text'` asks the
+ * WRITE-INS (write-ins). A group of `kind: 'text'` asks the
  * shopper to type an answer instead of picking one: the name and number
- * printed on a jersey. It holds exactly one option, which carries what a
+ * printed on a sign, an engraving, a cake message. It holds exactly one option, which carries what a
  * filled answer adds to the price (by variant too) and its helper note, so
  * pricing, ids and every path that carries picks stay the same; the pick
  * adds the `text`. The answer is checked and cleaned on the server like any
- * pick ({@link cleanWriteIn}) and prints on the line as "Name on jersey:
- * SMITH". With write-ins and required size groups, one variant sells a set
+ * pick ({@link cleanWriteIn}) and prints on the line as "Engraving: For
+ * Sam". With write-ins and required size groups, one variant sells a set
  * of pieces in any combination of sizes, with no cap on combinations.
  *=========================================*/
 
@@ -94,11 +94,11 @@ export interface ProductModifierGroup {
   kind?: ProductModifierGroupKind
   /** A write-in's longest answer, 1 to {@link MAX_WRITE_IN_LENGTH}; {@link DEFAULT_WRITE_IN_LENGTH} when absent. */
   maxLength?: number
-  /** A write-in that takes digits only, such as a race number. */
+  /** A write-in that takes digits only, such as a number. */
   digitsOnly?: boolean
   /**
    * Print the group's name before the choice on the order, receipt and
-   * emails ("Jersey size: M"), for choices that do not say what they are on
+   * emails ("Size: M"), for choices that do not say what they are on
    * their own. A write-in always prints its name.
    */
   nameOnOrder?: boolean
@@ -121,9 +121,9 @@ export interface OrderLineModifier {
   group: string
   name: string
   priceCents: number
-  /** A write-in's answer as sold, such as the name for the jersey. */
+  /** A write-in's answer as sold, such as the text to engrave. */
   text?: string
-  /** The group's name prints before the choice on the line ("Jersey size: M"). */
+  /** The group's name prints before the choice on the line ("Size: M"). */
   nameOnOrder?: boolean
 }
 
@@ -139,7 +139,7 @@ export const POS_MAX_MODIFIER_GROUPS = 10
 export const POS_MAX_MODIFIER_OPTIONS = 20
 /** $1,000 on one modifier: anything larger is a product, not an add-on. */
 export const POS_MAX_MODIFIER_PRICE_CENTS = 100_000
-/** The longest answer a write-in can take: a name and a nickname for a jersey fit well inside. */
+/** The longest answer a write-in can take: a name or a short message fits well inside. */
 export const MAX_WRITE_IN_LENGTH = 40
 /** A write-in's length when the merchant sets none. */
 export const DEFAULT_WRITE_IN_LENGTH = 20
@@ -400,7 +400,7 @@ export function resolveLineModifiers(
   const modifiers: OrderLineModifier[] = []
   for (const group of groups) {
     if (modifierGroupIsWriteIn(group)) {
-      // A write-in (the gear set builder): its answer is checked, cleaned and kept.
+      // A write-in (write-ins): its answer is checked, cleaned and kept.
       const option = group.options[0]
       const pick = picks.find((entry) => entry.groupId === group.id && entry.optionId === option.id)
       const problem = writeInProblem(group, pick?.text)
@@ -503,7 +503,7 @@ export function modifierSelectionOf(
  */
 export function encodeModifierSelection(selection: readonly ModifierSelection[] | undefined): string {
   if (!selection?.length) return ''
-  // A write-in's answer rides as a third entry: `[["group","option","SMITH"],…]`.
+  // A write-in's answer rides as a third entry: `[["group","option","For Sam"],…]`.
   return JSON.stringify(
     selection.map((pick) => (pick.text ? [pick.groupId, pick.optionId, pick.text] : [pick.groupId, pick.optionId])),
   )
@@ -536,8 +536,8 @@ export type PrintedModifier = Pick<OrderLineModifier, 'name'> &
 
 /**
  * How one modifier prints on a line: its name (`Oat milk`), its group and
- * name when the group asks for it (`Jersey size: M`), or a write-in's name
- * and answer (`Name on jersey: SMITH`).
+ * name when the group asks for it (`Size: M`), or a write-in's name
+ * and answer (`Engraving: For Sam`).
  */
 export function modifierLineText(modifier: PrintedModifier): string {
   if (modifier.text) return `${modifier.group || modifier.name}: ${modifier.text}`

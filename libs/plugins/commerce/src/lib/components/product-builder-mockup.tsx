@@ -61,7 +61,7 @@ export function productBuilderPicks(input: {
     for (const option of group.options) {
       const pick = addOns.find((entry) => entry.groupId === group.id && entry.optionId === option.id)
       if (!pick) continue
-      // A write-in names its answer ("Name on jersey: SMITH"), as the order line does.
+      // A write-in names its answer ("Engraving: For Sam"), as the order line does.
       const text = writeIn ? cleanWriteIn(pick.text, group) : ''
       if (writeIn && !text) continue
       names.push(modifierLineText({ name: option.name, group: group.name, text, nameOnOrder: group.nameOnOrder }))
