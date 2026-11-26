@@ -185,6 +185,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/custom-domains/buy-a-domain',
     title: 'Buy a domain',
   },
+  calendar: {
+    path: '/content-and-data/events/calendar',
+    title: 'Calendar, categories and repeating events',
+  },
   catalog: {
     path: '/commerce-and-bookings/commerce/catalog',
     title: 'Product catalog',
@@ -1039,6 +1043,7 @@ export const DOCS_HELP_ANCHORS = {
   bulkActions: ['#exports', '#contacts', '#the-contacts-file', '#companies', '#deals', '#tasks', '#leads', '#at-the-organization-level', '#when-a-row-cannot-be-changed', '#adding-people-to-an-audience', '#related'],
   businessProfile: ['#where-to-edit-it', '#the-business-profile-card', '#where-the-values-come-from', '#workspace-defaults', '#contact-details-are-never-invented', '#what-aglyn-ai-learned', '#which-jobs-read-it', '#related'],
   buyADomain: ['#steps', '#site-has-a-domain', '#confirm-email', '#renewals', '#problems', '#transfer', '#after'],
+  calendar: ['#categories', '#repeating-events', '#calendar-element', '#event-details-page', '#tickets', '#add-to-calendar', '#site-search', '#import-and-export', '#aglyn-ai'],
   catalog: ['#products-options-and-variants', '#more-than-100-combinations', '#add-ons', '#price-by-size', '#add-ons-on-the-product-page', '#picture-cards', '#free-mockup', '#write-ins', '#name-the-group-on-the-order', '#a-product-built-from-choices', '#sell-in-person-only', '#offer-on-the-kiosk', '#billing-modes-and-subscriptions', '#subscriptions-list', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#show-reviews', '#review-settings', '#review-moderation', '#slugs', '#merchant-center-feed', '#related'],
   claude: ['#connect-claude', '#other-assistants', '#what-claude-can-do', '#changes-show-on-your-live-site', '#what-it-cannot-do', '#good-habits', '#disconnect-claude', '#claude-code', '#for-developers'],
   comingSoonLaunch: ['#1-build-the-coming-soon-page', '#the-notify-me-form', '#2-make-it-the-home-page', '#3-keep-everything-else-out-of-search', '#while-nothing-is-ready-the-site-wide-switch', '#once-youre-launching-page-by-page-per-screen-visibility', '#4-collect-the-signups', '#5-launch-day-reverse-every-step', '#6-verify-it-actually-worked', '#related'],
