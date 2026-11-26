@@ -442,6 +442,24 @@ export const FLAG_DOC_PAGES: Partial<
       checkNoPriceClaim: true,
     },
   ],
+  // AGL-4252. The Calendar and Event details elements, categories, repeats,
+  // tickets, the feed and the new search sources. The calendar page is ABOUT
+  // them, so it opens with the admonition; the add-on's own page mentions them
+  // beside the qualification. Neither prices them: the add-on page does.
+  release_events_calendar_v2: [
+    {
+      path: 'docs/content-and-data/events/calendar.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/content-and-data/events/overview.md',
+      disclosure: [/\*\*The new events calendar is rolling out\*\*,[\s\S]{0,40}may\s+not have it yet/],
+      checkNoPriceClaim: false,
+      priceClaimNote:
+        'The add-on page prices the Event Calendar add-on itself, which is released; the new calendar adds no price of its own.',
+    },
+  ],
   release_site_starters: [
     {
       path: 'docs/building-sites/site-templates/site-starters.md',

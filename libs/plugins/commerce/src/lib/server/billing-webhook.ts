@@ -650,7 +650,7 @@ async function recordExternalRefund(
           timeline: CommerceModel.appendOrderEvent(
             order,
             'refund',
-            `$${(newCents / 100).toFixed(2)} refunded outside the dashboard (in Stripe)`,
+            `${CommerceModel.saleMoneyText(newCents, order.currency)} refunded outside the dashboard (in Stripe)`,
           ),
         },
         { merge: true },
@@ -2293,6 +2293,13 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   event,
   requestHost,
 }) => {
+  // The money of THIS sale in the currency it was charged in (AGL-4248): a
+  // session or charge names it. A USD sale reads exactly as it always has.
+  const saleMoney = (cents: number) =>
+    CommerceModel.saleMoneyText(
+      cents,
+      String((object as { currency?: unknown } | undefined)?.currency ?? 'usd'),
+    )
   // THE MERCHANT'S PAYMENT ACCOUNT CHANGED. Every commerce money route —
   // checkout, cart checkout, draft orders, reservations, POS — gates the sale
   // on the readiness the connect route CACHED on the merchant's profile
@@ -3765,8 +3772,11 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             ...(line.variantId ? { variantId: line.variantId } : {}),
             quantity: line.quantity,
           }))
+        // The units the shopper was charged, in cart order, when the
+        // checkout charged in another currency than the store's (AGL-4248).
+        const chargedUnits = CommerceModel.decodeChargeUnitsMetadata(object?.metadata)
         const lineItems: CommerceModel.OrderLineItem[] = cart.lines
-          .map((line) => {
+          .map((line, lineIndex) => {
             const product = productsById.get(line.productId)
             if (!product) return null
             const variant = line.variantId
@@ -3800,7 +3810,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 ? { supplierId: product.supplierId }
                 : {}),
               quantity: line.quantity,
+              // The unit the shopper was charged, when the checkout charged in
+              // another currency than the store's (AGL-4248).
               unitAmountCents:
+                chargedUnits?.[lineIndex] ??
                 Math.round(Number(variant?.priceUsd ?? 0) * 100) + extraCents,
             }
           })
@@ -3912,7 +3925,11 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           const totals = CommerceModel.computeCheckoutSessionTotals(
             lineItems,
             object,
-            { feeCents: Number(feeCents ?? 0), extrasCents: checkoutExtrasCents(cartExtras) },
+            {
+              // The take as charged, in the charge currency (AGL-4248).
+              feeCents: Number(object?.metadata?.chargeFeeCents ?? feeCents ?? 0),
+              extrasCents: Number(object?.metadata?.chargeExtrasCents ?? checkoutExtrasCents(cartExtras)),
+            },
           )
           // With the fields the orders list queries by (AGL-3321).
           transaction.set(orderRef, CommerceModel.withOrderListFields(orderRef.id, {
@@ -3921,6 +3938,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             channel: 'online',
             lineItems,
             totals,
+            // The currency it was paid in, and the store-currency figures (AGL-4248).
+            ...CommerceModel.orderCurrencyFields(object, totals),
             ...(cartExtras.length ? { extras: cartExtras } : {}),
             ...(creditSold ? { credits: [creditSold] } : {}),
             // How much of the discount was a gift card spent (AGL-3614): the
@@ -4153,7 +4172,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               (line) =>
                 `${line.quantity}× ${line.name}${
                   line.variantLabel ? ` (${line.variantLabel})` : ''
-                } — $${((line.unitAmountCents * line.quantity) / 100).toFixed(2)}`,
+                } — ${saleMoney(line.unitAmountCents * line.quantity)}`,
             )
             .concat(
               // Optional lines the buyer took (AGL-3635), as charged.
@@ -4187,7 +4206,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 `&productId=${line.productId}&token=${downloadToken}`,
             )
             .join('\n')
-          const orderTotal = `$${(Number(object?.amount_total ?? 0) / 100).toFixed(2)}`
+          const orderTotal = saleMoney(Number(object?.amount_total ?? 0))
           // Where to collect it, or when it is coming (AGL-3624).
           const fulfillmentText = cartLocalFulfillment?.summary ?? ''
           const orderSummary = [linesText, licenseText, downloadLines, fulfillmentText]
@@ -4301,7 +4320,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           hostRef,
           String(object.metadata?.stockHoldKey ?? ''),
         )
-        const cartOrderTotal = `$${(Number(object?.amount_total ?? 0) / 100).toFixed(2)}`
+        const cartOrderTotal = saleMoney(Number(object?.amount_total ?? 0))
         const cartUnits = lineItems.reduce((sum, line) => sum + line.quantity, 0)
         void notifyHostManagers(String(hostId), {
           type: 'content.order',
@@ -4341,7 +4360,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           interaction: {
             source: 'order',
             refId: String(object.id),
-            summary: `Placed an order ($${(Number(object?.amount_total ?? 0) / 100).toFixed(2)})`,
+            summary: `Placed an order (${saleMoney(Number(object?.amount_total ?? 0))})`,
           },
         })
         if (couponCode) {
@@ -5317,6 +5336,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             channel: 'online',
             lineItems: buyNowLineItems,
             totals: buyNowTotals,
+            // The currency it was paid in, and the store-currency figures (AGL-4248).
+            ...CommerceModel.orderCurrencyFields(object, buyNowTotals),
             // WHICH TAX THIS SALE CARRIED (AGL-2451). Buy-now's manual tax
             // goes over as an ordinary `line_items[1]` Stripe is never told is
             // tax (AGL-1711), so the session reports `amount_tax: 0` and
@@ -5392,7 +5413,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // In-app order notification (wave v6): host managers see sales
         // in the bell, not just the owner's email: what came in, from whom
         // and where (AGL-3432).
-        const buyNowTotal = `$${(Number(object?.amount_total ?? 0) / 100).toFixed(2)}`
+        const buyNowTotal = saleMoney(Number(object?.amount_total ?? 0))
         void notifyHostManagers(String(hostId), {
           type: 'content.order',
           title: `New order on {site} — ${buyNowTotal}`,
@@ -5598,7 +5619,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           interaction: {
             source: 'order',
             refId: String(object.id),
-            summary: `Placed an order ($${(Number(object?.amount_total ?? 0) / 100).toFixed(2)})`,
+            summary: `Placed an order (${saleMoney(Number(object?.amount_total ?? 0))})`,
           },
         })
         const productRef = hostRef.collection('products').doc(String(productId))
@@ -5892,7 +5913,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         hostId,
         subjectLabel: `order ${CommerceModel.formatOrderNumber(order, snapshot.id)}`,
         // The notice names the sum in question, as the dispute's does.
-        amount: orderCents > 0 ? `$${(orderCents / 100).toFixed(2)}` : null,
+        amount: orderCents > 0 ? CommerceModel.saleMoneyText(orderCents, order.currency) : null,
         // The Orders section of the Products hub, with this order's dialog
         // open — where Refund lives (`siteRecordLinks().order`).
         link: `/${hostId}/products/orders?order=${encodeURIComponent(snapshot.id)}`,

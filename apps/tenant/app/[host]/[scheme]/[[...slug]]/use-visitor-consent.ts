@@ -35,6 +35,9 @@ import {
   type VisitorConsentHost,
   type VisitorConsentPosture,
 } from '@aglyn/aglyn/app-utils/visitor-consent'
+// The region lookup lives in the lib (AGL-4248): a store's shopper currency
+// asks the same one-per-visit lookup, and an app holds no logic a lib needs.
+import { resolveVisitorCountry } from '@aglyn/aglyn/app-utils/visitor-country'
 import { useEffect, useState } from 'react'
 
 /**
@@ -66,74 +69,6 @@ import { useEffect, useState } from 'react'
  * un-decline a decline (choices made under the override are stored for
  * real, as the visitor's own clicks).
  */
-
-/** Session-scoped region cache — one lookup per visit, not per pageview. */
-const REGION_CACHE_KEY = 'aglyn:consent:region'
-
-/**
- * The lookup that is CURRENTLY IN FLIGHT, shared by every caller that arrives
- * while it is (AGL-2710).
- *
- * The session cache below is written when the response lands, so it dedupes
- * a later pageview and nothing sooner. Both callers of
- * {@link decideVisitorConsent} start inside that window by construction:
- * `primeVisitorConsent` fires during render and the hook fires from its
- * effect, and the gap between them is a hydration, not a network round trip.
- * Measured on a cold `aglyn.com` load the endpoint answered in 1466 ms and
- * the second request went out 864 ms before it — two invocations of a
- * header echo, on every first visit to every tenant site.
- *
- * Released once the promise settles rather than kept as a memo: the session
- * cache is the durable answer and it is the one that carries the "a
- * successful null is still an answer" rule. A rejected or headerless lookup
- * writes nothing, so releasing here is what lets the next pageview re-ask
- * instead of pinning a blip's verdict for the session.
- */
-let regionInFlight: Promise<string | null> | null = null
-
-async function fetchVisitorCountry(): Promise<string | null> {
-  try {
-    const response = await fetch('/api/consent/region')
-    if (!response.ok) return null
-    const payload = await response.json().catch(() => null)
-    const country =
-      typeof payload?.country === 'string' ? payload.country : null
-    try {
-      // A successful `null` is cached too: "the edge sends no geo here" is
-      // an answer, and re-asking cannot improve it this session.
-      window.sessionStorage.setItem(
-        REGION_CACHE_KEY,
-        JSON.stringify({ country }),
-      )
-    } catch {
-      // Best-effort cache only.
-    }
-    return country
-  } catch {
-    // Network failure reads as unknown region → opt-in, the strict side.
-    return null
-  }
-}
-
-async function resolveVisitorCountry(): Promise<string | null> {
-  try {
-    const cached = window.sessionStorage.getItem(REGION_CACHE_KEY)
-    if (cached) {
-      const parsed = JSON.parse(cached)
-      if (parsed && 'country' in parsed) {
-        return typeof parsed.country === 'string' ? parsed.country : null
-      }
-    }
-  } catch {
-    // No storage — fetch every pageview; correct, just less frugal.
-  }
-  if (regionInFlight) return regionInFlight
-  const pending = fetchVisitorCountry().finally(() => {
-    if (regionInFlight === pending) regionInFlight = null
-  })
-  regionInFlight = pending
-  return pending
-}
 
 function hasAskOverride(): boolean {
   try {

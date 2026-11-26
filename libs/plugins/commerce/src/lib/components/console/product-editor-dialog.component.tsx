@@ -87,6 +87,7 @@ import {
   type ConsoleProductCopyValues,
   type ConsoleProductEditorZoneProps,
 } from './product-zones'
+import ProductTrafficCard from './product-traffic-card.component'
 import {
   type MembersVideo,
   MembersVideosField,
@@ -96,6 +97,8 @@ import {
 import { ProductCheckInFields } from './product-check-in-fields.component'
 import { ProductRegisterFields, ProductSellOnlineField } from './product-register-fields.component'
 import { ProductAddOnsFields } from './product-add-ons-fields.component'
+import { ProductFixedPricesFields } from './product-fixed-prices-fields.component'
+import { useCurrencySetup } from './use-currency-setup'
 import { ProductBuilderFields } from './product-builder-fields.component'
 import { ProductKioskOfferField } from './product-kiosk-offer-field.component'
 
@@ -1642,6 +1645,33 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
   )
 
 
+  /*
+   * The store's other currencies (AGL-4248), read once the dialog is open:
+   * a closed editor costs nothing (see the pickers above).
+   */
+  const currencySetup = useCurrencySetup(hostId, open)
+  const handleFixedPrice = useCallback(
+    (index: number, code: string, raw: string) =>
+      update((at) => {
+        const variants = [...at.variants]
+        const major = CommerceModel.parseMajorInput(raw)
+        if (major === null || !variants[index]) return {}
+        const fixedPrices = CommerceModel.withCurrencyAmount(
+          variants[index].fixedPrices,
+          code,
+          major,
+        )
+        const next = { ...variants[index] }
+        // A cleared price converts again; an emptied map is dropped, never
+        // stored as `undefined` (the client-direct `setDoc` refuses one).
+        if (fixedPrices) next.fixedPrices = fixedPrices
+        else delete next.fixedPrices
+        variants[index] = next
+        return { variants }
+      }),
+    [update],
+  )
+
   const handleSave = useCallback(async () => {
     if (!current.name.trim() || error) return
     /*
@@ -1875,6 +1905,18 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
         {CommerceModel.productPriceMissing(current) ? (
           <Alert severity="warning">{PRODUCT_PRICE_EMPTY_NOTICE}</Alert>
         ) : null}
+        {currencySetup.others.length ? (
+          <>
+            <Divider textAlign="left">{'Prices in other currencies'}</Divider>
+            <ProductFixedPricesFields
+              variants={current.variants}
+              base={currencySetup.base}
+              currencies={currencySetup.others}
+              rates={currencySetup.rates}
+              onPrice={handleFixedPrice}
+            />
+          </>
+        ) : null}
         <Typography variant="caption" color="text.secondary">
           {stockApplies
             ? 'Blank stock = untracked; 0 shows sold out. The first variant’s ' +
@@ -1958,6 +2000,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           variants={current.variants}
           update={update}
           pick={pick}
+          currencies={currencySetup}
         />
         {/*
           The product builder (AGL-4205): each option's picture card, and
@@ -2060,6 +2103,12 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             proposeValues={proposeSeoValues}
           />
         ) : null}
+
+        {/*
+          This product's own page views (AGL-4253), from its stored address:
+          the Pages table's row for it, where it is edited.
+        */}
+        {product?.$id ? <ProductTrafficCard hostId={hostId} slug={product.slug} /> : null}
 
         {/* The ceiling's own warning sits beside the options (AGL-4100). */}
         {error && error !== matrixProblem ? <Alert severity="warning">{error}</Alert> : null}

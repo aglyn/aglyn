@@ -217,6 +217,13 @@
       "description": "A YouTube film with no poster shows YouTube's own thumbnail, loaded by each visitor's browser from i.ytimg.com (AGL-4140). OFF until the Subprocessors page disclosing it is published.",
       "valueType": "JSON"
     },
+    "release_events_calendar_v2": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "Events calendar v2 (AGL-4252): Calendar and Event details elements, repeating events, categories, tickets, calendar feed, events in site search. OFF by default.",
+      "valueType": "JSON"
+    },
     "release_ai_site_chat": {
       "defaultValue": {
         "value": "{\"enabled\": false, \"rolloutPercent\": 0}"

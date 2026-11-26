@@ -39,6 +39,8 @@ export interface PublicProductDetail {
      */
     priceUsd: number | null
     compareAtPriceUsd?: number
+    /** The merchant's own price per currency (AGL-4248), major units; it wins over conversion. */
+    fixedPrices?: Record<string, number>
     soldOut: boolean
     imageUrl?: string
     /**
@@ -99,6 +101,8 @@ export interface PublicModifierGroup {
     priceCents: number
     /** What the choice adds on a variant priced differently, by variant id. */
     priceCentsByVariant?: Record<string, number>
+    /** What the choice adds in another currency (AGL-4248), minor units by ISO code. */
+    fixedPriceCents?: Record<string, number>
     /** The choice's card (AGL-4205): its picture, its note, and what a combo includes. */
     imageUrl?: string
     note?: string
@@ -130,6 +134,9 @@ export function publicModifierGroups(
       ...(option.priceCentsByVariant && Object.keys(option.priceCentsByVariant).length
         ? { priceCentsByVariant: { ...option.priceCentsByVariant } }
         : {}),
+      ...(publicFixedPrices(option.fixedPriceCents)
+        ? { fixedPriceCents: publicFixedPrices(option.fixedPriceCents) }
+        : {}),
       // Card fields are checked at save (`modifierCardsProblem`), not on this
       // read, so only well-formed values reach the page (AGL-4205).
       ...(typeof option.imageUrl === 'string' && option.imageUrl ? { imageUrl: option.imageUrl } : {}),
@@ -137,6 +144,19 @@ export function publicModifierGroups(
       ...(CommerceModel.modifierOptionIsCombo(option) ? { includes: [...(option.includes ?? [])] } : {}),
     })),
   }))
+}
+
+/**
+ * Fixed prices per currency as a storefront may print them (AGL-4248): ISO
+ * codes to non-negative numbers, or nothing. The charge prices them again.
+ */
+export function publicFixedPrices(raw: unknown): Record<string, number> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const entries = Object.entries(raw as Record<string, unknown>).filter(
+    (entry): entry is [string, number] =>
+      /^[A-Z]{3}$/.test(entry[0]) && typeof entry[1] === 'number' && Number.isFinite(entry[1]) && entry[1] >= 0,
+  )
+  return entries.length ? Object.fromEntries(entries) : undefined
 }
 
 /**
@@ -174,6 +194,7 @@ export function toPublicProductDetail(
       ...(variant.compareAtPriceUsd
         ? { compareAtPriceUsd: variant.compareAtPriceUsd }
         : {}),
+      ...(publicFixedPrices(variant.fixedPrices) ? { fixedPrices: publicFixedPrices(variant.fixedPrices) } : {}),
       soldOut:
         variant.inventory != null &&
         Number(variant.inventory) <= 0 &&

@@ -78,6 +78,44 @@ private class RecordingApi(var failWith: Throwable? = null, var verdict: String 
 }
 
 class OrdersTest {
+  /** An order paid in New Zealand dollars shows NZ$, with the store's US-dollar total beside it on the detail (AGL-4248). */
+  @Test
+  fun anOrderPaidInNzdFormatsInNzdWithTheStoreTotalBeside() {
+    val doc = orderDoc(
+      "o9", "status" to "paid", "currency" to "nzd", "baseCurrency" to "usd", "fxRate" to 1.7,
+      "totals" to mapOf("totalCents" to 14100L, "itemsCents" to 14100L),
+      "baseTotals" to mapOf("totalCents" to 8294L, "itemsCents" to 8294L),
+    )
+    val row = orderRow(doc)
+    assertEquals("nzd", row.currency)
+    assertEquals("NZD", orderCurrency(row.currency, "USD"))
+    assertEquals("NZ$141.00", com.aglyn.contracts.formatOrderMoney(row.netCents, orderCurrency(row.currency, "USD")))
+    val order = hostOrderFrom(doc)
+    assertEquals("NZ$141.00 (US$82.94)", orderTotalText(order, "USD"))
+  }
+
+  /** An order from before multi-currency carries none and is in the store's currency, with nothing beside its total. */
+  @Test
+  fun anOrderWithoutACurrencyIsInTheStoreCurrency() {
+    val old = hostOrderFrom(orderDoc("o1", "status" to "paid", "totals" to mapOf("totalCents" to 4500L)))
+    assertEquals("USD", orderCurrency(old, "USD"))
+    assertEquals("A$45.00", orderTotalText(old, "AUD"))
+    val same = hostOrderFrom(
+      orderDoc(
+        "o2", "currency" to "usd", "baseCurrency" to "usd",
+        "totals" to mapOf("totalCents" to 4500L), "baseTotals" to mapOf("totalCents" to 4500L),
+      ),
+    )
+    assertEquals("$45.00", orderTotalText(same, "USD"))
+    val gbp = hostOrderFrom(
+      orderDoc(
+        "o3", "currency" to "gbp", "baseCurrency" to "eur",
+        "totals" to mapOf("totalCents" to 1000L), "baseTotals" to mapOf("totalCents" to 1170L),
+      ),
+    )
+    assertEquals("£10.00 (€11.70)", orderTotalText(gbp, "EUR"))
+  }
+
   @Test
   fun eachChipIsAClauseOnTheOneQuery() {
     val all = ordersQuery("h1", OrderFilter.ALL)

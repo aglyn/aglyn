@@ -86,6 +86,12 @@ export interface ProductVariant {
   sku?: string
   barcode?: string
   priceUsd: number
+  /**
+   * Fixed prices in other currencies the store sells in (AGL-4248), major
+   * units keyed by ISO code: `{ NZD: 449 }`. A currency not listed converts
+   * from `priceUsd` at the daily rate.
+   */
+  fixedPrices?: Record<string, number>
   /** Strike-through price; a sale badge shows when > priceUsd. */
   compareAtPriceUsd?: number
   weightGrams?: number

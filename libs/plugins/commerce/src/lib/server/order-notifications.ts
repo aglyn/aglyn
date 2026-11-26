@@ -770,7 +770,8 @@ export async function notifyOrderBuyer(
       businessName: String(
         resolveHostToken('businessName', store.host as HostTokenSource) ?? '',
       ),
-      currency: store.currency,
+      // The currency the order was paid in, when not the store's (AGL-4248).
+      currency: order.currency ? order.currency.toUpperCase() : store.currency,
       statusUrl: statusLink(store, ref),
       // A sale of card reader hardware states the terms it is sold under (AGL-4038).
       receiptFooter: withPosHardwareReceiptNotice(String(store.settings['receiptFooter'] ?? ''), order),
@@ -913,7 +914,8 @@ export async function sendOrderReceipt(
       businessName: String(
         resolveHostToken('businessName', store.host as HostTokenSource) ?? '',
       ),
-      currency: store.currency,
+      // The currency the order was paid in, when not the store's (AGL-4248).
+      currency: order.currency ? order.currency.toUpperCase() : store.currency,
       statusUrl: statusLink(store, ref),
       // A sale of card reader hardware states the terms it is sold under (AGL-4038).
       receiptFooter: withPosHardwareReceiptNotice(String(store.settings['receiptFooter'] ?? ''), order),

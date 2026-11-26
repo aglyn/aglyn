@@ -95,6 +95,13 @@ export interface ShippingRate {
   tiers?: ShippingTier[]
   /** carrier: the live rate's options (AGL-3612). */
   carrier?: CarrierRateSettings
+  /**
+   * flat + free_over: the price in another currency the store sells in
+   * (AGL-4248), minor units keyed by ISO code. A currency not listed converts.
+   */
+  amountsByCurrency?: Record<string, number>
+  /** free_over: the threshold in another currency (AGL-4248), minor units by ISO code. */
+  freeOverByCurrency?: Record<string, number>
 }
 
 export interface ShippingSettings {
@@ -1073,12 +1080,48 @@ export function appendShippingAddressCollectionParams(
 export function appendCheckoutShippingParams(
   params: URLSearchParams,
   options: readonly ResolvedShippingRate[],
+  currency = 'usd',
+  extra: { taxBehavior?: 'inclusive' | 'exclusive' } = {},
 ): void {
   options.forEach((option, index) => {
     const field = `shipping_options[${index}][shipping_rate_data]`
     params.set(`${field}[type]`, 'fixed_amount')
     params.set(`${field}[display_name]`, option.name.slice(0, 100))
     params.set(`${field}[fixed_amount][amount]`, String(option.amountCents))
-    params.set(`${field}[fixed_amount][currency]`, 'usd')
+    params.set(`${field}[fixed_amount][currency]`, currency.toLowerCase())
+    if (extra.taxBehavior) params.set(`${field}[tax_behavior]`, extra.taxBehavior)
+  })
+}
+
+/**
+ * Resolved options re-priced in a shopper currency (AGL-4248): a rate's own
+ * amount in that currency when the merchant set one, else the store amount
+ * converted; and a free-over rate with its own threshold there is free, or
+ * not, against the goods in that currency rather than the store-currency
+ * subtotal it was planned on. Pickup stays free. Order is kept.
+ */
+export function shippingOptionsInCurrency(
+  options: readonly ResolvedShippingRate[],
+  settings: ShippingSettings | undefined,
+  currency: {
+    code: string
+    subtotalMinor: number
+    convert: (baseCents: number, fixedMinor?: Record<string, number>) => number
+  },
+): ResolvedShippingRate[] {
+  const code = currency.code.toUpperCase()
+  return options.map((option) => {
+    if (option.rateId === LOCAL_PICKUP_RATE_ID) return option
+    const rate = settings?.rates?.find((entry) => entry.id === option.rateId)
+    const threshold = rate?.kind === 'free_over' ? rate.freeOverByCurrency?.[code] : undefined
+    if (rate && typeof threshold === 'number') {
+      const free = currency.subtotalMinor >= threshold
+      const amount = free ? 0 : currency.convert(Math.max(0, Math.round(rate.amountCents ?? 0)), rate.amountsByCurrency)
+      return { ...option, amountCents: amount }
+    }
+    if (option.amountCents === 0) return option
+    const fixed =
+      rate && (rate.kind === 'flat' || rate.kind === 'free_over') ? rate.amountsByCurrency : undefined
+    return { ...option, amountCents: currency.convert(option.amountCents, fixed) }
   })
 }

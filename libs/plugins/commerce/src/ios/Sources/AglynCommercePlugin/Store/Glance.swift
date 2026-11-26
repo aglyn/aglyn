@@ -35,6 +35,10 @@ final class GlanceModel {
   private(set) var lowStock: Int?
   private(set) var capped = false
   private(set) var latest: [OrderRow] = []
+  /// The store's own currency, which an order from before multi-currency is in.
+  private(set) var storeCurrency = "USD" {
+    didSet { if oldValue != storeCurrency { latest = latest.map { var row = $0; row.storeCurrency = storeCurrency; return row } } }
+  }
   private(set) var failed = false
   private(set) var hasProducts = false
   @ObservationIgnored private var listeners: [FirestoreListening] = []
@@ -61,6 +65,7 @@ final class GlanceModel {
   }
 
   private func listen(_ reader: FirestoreReader, hostID: String) {
+    listeners.append(listenStoreCurrency(reader, hostID: hostID) { [weak self] in self?.storeCurrency = $0 })
     listeners.append(
       reader.listen(FirestoreQuery(productsPath(hostID), limit: glanceProductCeiling + 1)) { [weak self] result in
         guard let self else { return }
@@ -77,7 +82,7 @@ final class GlanceModel {
         [weak self] result in
         guard let self else { return }
         if case .success(let docs) = result {
-          self.latest = docs.map { OrderRow(id: $0.id, order: decodeOrder($0)) }
+          self.latest = docs.map { OrderRow(id: $0.id, order: decodeOrder($0), storeCurrency: self.storeCurrency) }
         } else {
           self.failed = true
         }

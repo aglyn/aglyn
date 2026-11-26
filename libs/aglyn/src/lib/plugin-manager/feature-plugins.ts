@@ -330,6 +330,13 @@ export interface ConsolePluginPageProps {
    * answer without reaching for the console-app release-flag hooks (which
    * live in `scope:app` and are off-limits to a `scope:lib` plugin).
    */
+  /**
+   * The verdict for ANY release flag the page names (AGL-4252), staff bypass
+   * applied as for the console dock's widgets: for a plugin with a second
+   * flag of its own beside the one its nav item names, such as the events
+   * calendar's v2. Absent outside the console shell; read absent as off.
+   */
+  releaseVerdict?: (key: string) => ConsoleReleaseVerdict
   releaseFlag?: {
     /**
      * The rollout verdict for this ORG — staff bypass deliberately NOT

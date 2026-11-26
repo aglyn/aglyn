@@ -30,6 +30,10 @@ Until it's enabled the Events page explains the add-on, and the Event List eleme
 renders nothing on your site.
 :::
 
+A month and week calendar, categories, repeating events and tickets are part of the
+new events calendar. **The new events calendar is rolling out**, so your workspace may
+not have it yet; see [Calendar, categories and repeating events](./calendar.md).
+
 ## Manage events
 
 The console **Events** page lists your site's events, newest start first. It has no

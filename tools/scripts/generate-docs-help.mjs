@@ -185,6 +185,8 @@ const PLUGIN_TOPICS = {
   buildAWorkflow: '/marketing-and-automation/workflows-and-actions/build-a-workflow',
   catalog: '/commerce-and-bookings/commerce/catalog',
   commerce: '/commerce-and-bookings/commerce/overview',
+  // The Currencies card beside Store settings (AGL-4248).
+  currencies: '/commerce-and-bookings/commerce/currencies',
   commerceEndToEnd: '/guides/commerce-end-to-end',
   // The Quotes cards on the Orders tab and the Checkout settings (AGL-4094).
   quotes: '/commerce-and-bookings/commerce/quotes-and-proofs',

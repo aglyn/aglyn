@@ -79,7 +79,10 @@ fun orderRefundSummary(order: HostOrder): String {
   val state = orderRefundState(order)
   if (state == OrderRefundState.NONE) return ""
   val refunded = max(0.0, order.refundedCents ?: 0.0)
-  if (state == OrderRefundState.FULL) return "Refunded in full ($${usd(refunded)})"
+  // In the currency it was paid in (AGL-4248); a USD order reads as before.
+  val currency = (order.currency ?: "usd").uppercase()
+  fun money(cents: Double): String = if (currency == "USD") "$" + usd(cents) else formatOrderMoney(cents, currency)
+  if (state == OrderRefundState.FULL) return "Refunded in full (${money(refunded)})"
   val revoked = order.refundedLineItemIds?.size ?: 0
   val lines = order.lineItems?.size ?: 0
   val scope = if (revoked > 0) {
@@ -87,7 +90,7 @@ fun orderRefundSummary(order: HostOrder): String {
   } else {
     "no lines withdrawn — refunded by amount"
   }
-  return "Partially refunded ($${usd(refunded)} of $${usd(order.grossCents())}) — $scope"
+  return "Partially refunded (${money(refunded)} of ${money(order.grossCents())}) — $scope"
 }
 
 /** The sale's revenue after refunds; a refunded register tip comes off at most once. */
@@ -99,7 +102,13 @@ fun orderNetCents(order: HostOrder): Double {
 }
 
 /** What the order took, less refunds. */
-fun orderPaidCents(order: HostOrder): Double = order.grossCents() - (order.refundedCents ?: 0.0)
+fun orderPaidCents(order: HostOrder): Double {
+  // An order paid in another currency counts in the store's (AGL-4248).
+  val base = order.baseTotals?.totalCents
+  val rate = order.fxRate ?: 0.0
+  if (base != null && rate > 0) return jsRound(base).toDouble() - jsRound((order.refundedCents ?: 0.0) / rate).toDouble()
+  return order.grossCents() - (order.refundedCents ?: 0.0)
+}
 
 /**
  * Splits [totalCents] across [weights] in whole cents by largest remainder,
