@@ -728,6 +728,56 @@ class MediaApi(private val api: ConsoleApiClient, private val scope: MediaScope,
     }
   }
 
+  /**
+   * What a move to the other library would do (`POST /api/media/move-library`, `preview: true`): which files can move,
+   * which stay and why, and how many pages, products or settings that use them would be updated. Writes nothing.
+   */
+  suspend fun previewLibraryMove(orgId: String, hostId: String, direction: MediaLibraryDirection, ids: List<String>): MediaLibraryPreview =
+    parseMediaLibraryPreview(api.request(MEDIA_LIBRARY_MOVE_PATH, ApiMethod.POST, mediaLibraryMoveBody(orgId, hostId, direction, ids, preview = true)))
+
+  /**
+   * Moves the previewed files to the other library, asking again for what the route did not reach while each round
+   * still moves or fails something (at most [MEDIA_LIBRARY_MOVE_ROUNDS] rounds). Every file it did not hear back about
+   * is reported as not moved, so it stays selected. A request that fails stops the loop and is kept in the outcome.
+   */
+  suspend fun moveLibrary(
+    orgId: String,
+    hostId: String,
+    direction: MediaLibraryDirection,
+    preview: MediaLibraryPreview,
+    nameOf: (String) -> String,
+    progress: (done: Int, total: Int) -> Unit = { _, _ -> },
+  ): MediaLibraryMoveOutcome {
+    val movedIds = mutableListOf<String>()
+    val notMoved = preview.refused.toMutableList()
+    var rewrote = 0L
+    var pending = preview.movable
+    var failure: Throwable? = null
+    var rounds = 0
+    progress(0, preview.movable.size)
+    while (pending.isNotEmpty() && rounds < MEDIA_LIBRARY_MOVE_ROUNDS) {
+      rounds += 1
+      val answer = try {
+        api.request(MEDIA_LIBRARY_MOVE_PATH, ApiMethod.POST, mediaLibraryMoveBody(orgId, hostId, direction, pending))
+      } catch (error: Throwable) {
+        if (error is CancellationException) throw error
+        failure = error
+        break
+      }
+      val round = parseMediaLibraryMoveRound(answer)
+      movedIds += round.movedIds
+      rewrote += round.rewroteUses
+      notMoved += round.failed + round.refused
+      progress(movedIds.size, preview.movable.size)
+      if (round.movedIds.isEmpty() && round.failed.isEmpty()) break
+      pending = round.remainingIds
+    }
+    for (id in preview.movable) {
+      if (id !in movedIds && notMoved.none { it.mediaId == id }) notMoved += MediaLibraryNotMoved(id, nameOf(id), null)
+    }
+    return MediaLibraryMoveOutcome(movedIds, notMoved, rewrote, failure)
+  }
+
   suspend fun createFolder(name: String, parentId: String?) {
     api.request("/api/media/folders", ApiMethod.POST, body("action" to "create-folder", "name" to name, "parentId" to parentId))
   }
@@ -786,6 +836,154 @@ class MediaApi(private val api: ConsoleApiClient, private val scope: MediaScope,
     }
     return found
   }
+}
+
+/** The route that moves files between a site's library and the organization library (AGL-4254). */
+const val MEDIA_LIBRARY_MOVE_PATH = "/api/media/move-library"
+
+/** The most rounds one move asks for; each answers what is left for the next. */
+const val MEDIA_LIBRARY_MOVE_ROUNDS = 20
+
+/** Which way a move between libraries goes (`MediaLibraryDirection`). */
+enum class MediaLibraryDirection(val wire: String) {
+  /** From the organization library into this site's. */
+  TO_SITE("to-site"),
+
+  /** From this site's library into the organization's. */
+  TO_ORG("to-org"),
+}
+
+/**
+ * Which way the library being shown can move its files: a site's own library to the organization's, the organization
+ * library as a site sees it to that site's. The workspace's own library page has no site to move into, so none.
+ */
+fun mediaLibraryDirection(scope: MediaScope): MediaLibraryDirection? = when (scope) {
+  is MediaScope.Site -> MediaLibraryDirection.TO_ORG
+  is MediaScope.Org -> if (scope.forHostId != null) MediaLibraryDirection.TO_SITE else null
+}
+
+/** The route's body: both libraries, the direction, the files, and `preview` only when asking. */
+fun mediaLibraryMoveBody(orgId: String, hostId: String, direction: MediaLibraryDirection, ids: List<String>, preview: Boolean = false): JsonElement =
+  jsonValue(
+    buildMap {
+      put("orgId", orgId)
+      put("hostId", hostId)
+      put("direction", direction.wire)
+      put("mediaIds", ids)
+      if (preview) put("preview", true)
+    },
+  )
+
+/** A file that did not move, and the route's reason when it gave one. */
+data class MediaLibraryNotMoved(val mediaId: String, val name: String, val reason: String?)
+
+/** What a preview answered: the files that can move, the ones that stay and why, and how many records use the movable ones. */
+data class MediaLibraryPreview(val movable: List<String>, val refused: List<MediaLibraryNotMoved>, val documents: Int)
+
+/** One round of a move, as the route answered it. */
+data class MediaLibraryMoveRound(
+  val movedIds: List<String>,
+  val failed: List<MediaLibraryNotMoved>,
+  val refused: List<MediaLibraryNotMoved>,
+  val remainingIds: List<String>,
+  val rewroteUses: Long,
+)
+
+/** A whole move: what moved, what did not (with the preview's refusals), the uses rewritten, and the request that failed, if one did. */
+data class MediaLibraryMoveOutcome(val movedIds: List<String>, val notMoved: List<MediaLibraryNotMoved>, val rewroteUses: Long, val failure: Throwable?)
+
+private fun JsonElement?.ids(key: String): List<String> =
+  ((this as? JsonObject)?.get(key) as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.ifBlank { null } }.orEmpty()
+
+private fun JsonElement?.notMoved(key: String): List<MediaLibraryNotMoved> =
+  ((this as? JsonObject)?.get(key) as? JsonArray)?.mapNotNull { entry ->
+    val id = entry.field("mediaId")?.ifBlank { null } ?: return@mapNotNull null
+    MediaLibraryNotMoved(id, entry.field("name")?.ifBlank { null } ?: id, entry.field("reason")?.ifBlank { null })
+  }.orEmpty()
+
+private fun JsonElement?.wholeNumber(key: String): Long = ((this as? JsonObject)?.get(key) as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toLong() ?: 0
+
+fun parseMediaLibraryPreview(answer: JsonElement?): MediaLibraryPreview =
+  MediaLibraryPreview(answer.ids("movable"), answer.notMoved("refused"), answer.wholeNumber("documents").toInt())
+
+fun parseMediaLibraryMoveRound(answer: JsonElement?): MediaLibraryMoveRound = MediaLibraryMoveRound(
+  movedIds = answer.ids("movedIds"),
+  failed = answer.notMoved("failed"),
+  refused = answer.notMoved("refused"),
+  remainingIds = answer.ids("remainingIds"),
+  rewroteUses = ((answer as? JsonObject)?.get("rewrote") as? JsonObject).wholeNumber("uses"),
+)
+
+/*
+ * What the library says around a move to the other library (the console's `media-library-move-copy`): a partial result
+ * is never called a failure, what did not move is named and stays selected, and every sentence says where the files are.
+ */
+
+private fun libraryFiles(count: Int) = "$count file${if (count == 1) "" else "s"}"
+private fun libraryUses(count: Long) = "$count use${if (count == 1L) "" else "s"}"
+
+/** The action's label, by where the file goes. */
+fun moveToOtherLibraryLabel(direction: MediaLibraryDirection): String =
+  if (direction == MediaLibraryDirection.TO_SITE) "Move to this site's library" else "Move to organization library"
+
+/** Where the files go, in a sentence. */
+fun mediaLibraryName(direction: MediaLibraryDirection): String =
+  if (direction == MediaLibraryDirection.TO_SITE) "this site's library" else "the organization library"
+
+/** The dialog's explanation before anything moves. */
+fun moveToOtherLibraryIntro(direction: MediaLibraryDirection, movable: Int, documents: Int): String {
+  val what = if (direction == MediaLibraryDirection.TO_SITE) "Only this site will be able to use them." else "Every site in the workspace will be able to use them."
+  val one = documents == 1
+  val updated = if (documents > 0) {
+    " $documents page${if (one) "" else "s"}, product${if (one) "" else "s"} or setting${if (one) "" else "s"} that use${if (one) "s" else ""} them will be updated to the new address, and the old address keeps working."
+  } else {
+    " Nothing uses them yet."
+  }
+  return "${libraryFiles(movable)} will move to ${mediaLibraryName(direction)}. $what$updated"
+}
+
+/** What the dialog says when none of the picked files can move. */
+fun noneCanMoveToLibrary(direction: MediaLibraryDirection): String = "None of these files can move to ${mediaLibraryName(direction)}."
+
+/** The heading over the files a preview refused. */
+fun mediaLibraryRefusedHeading(count: Int): String =
+  "$count file${if (count == 1) "" else "s"} will stay where ${if (count == 1) "it is" else "they are"}:"
+
+/** One refused file, its reason without the route's lead-in. */
+fun mediaLibraryRefusedLine(refused: MediaLibraryNotMoved): String =
+  "${refused.name}: ${refused.reason.orEmpty().removePrefix("Stays in the organization library: ")}"
+
+/** The confirm button: `Move 3 files`, or `Move` when nothing can. */
+fun moveToOtherLibraryConfirm(movable: Int): String = if (movable > 0) "Move ${libraryFiles(movable)}" else "Move"
+
+/** `Moved 12 files to this site's library and updated 31 uses`. */
+fun movedToOtherLibraryMessage(direction: MediaLibraryDirection, moved: Int, rewrote: Long): String =
+  "Moved ${libraryFiles(moved)} to ${mediaLibraryName(direction)} and updated ${libraryUses(rewrote)}"
+
+/** `Moved 7 of 9 to this site's library and updated 12 uses — 2 could not be moved: "a.png" and "b.png", and are still selected`. */
+fun partialOtherLibraryMessage(direction: MediaLibraryDirection, moved: Int, total: Int, rewrote: Long, notMoved: List<MediaLibraryNotMoved>): String {
+  val named = notMoved.take(3).map { one -> one.reason?.let { "\"${one.name}\" ($it)" } ?: "\"${one.name}\"" }
+  val more = if (notMoved.size > 3) " and ${notMoved.size - 3} more" else ""
+  val head = if (moved > 0) {
+    "Moved $moved of $total to ${mediaLibraryName(direction)} and updated ${libraryUses(rewrote)}"
+  } else {
+    "Could not move ${libraryFiles(total)} to ${mediaLibraryName(direction)}"
+  }
+  return "$head — ${notMoved.size} ${if (moved > 0) "could not be moved" else "are where they were"}: ${named.joinToString(", ")}$more, and ${if (notMoved.size == 1) "is" else "are"} still selected"
+}
+
+/** What the library says after a move: its words, and whether it went wholly, partly or not at all. */
+data class MediaLibraryMoveReport(val message: String, val tone: com.aglyn.ui.StatusTone)
+
+/** The report for [outcome] of a move of [total] picked files; a failed request with nothing moved reads as [describe] says. */
+fun mediaLibraryMoveReport(direction: MediaLibraryDirection, outcome: MediaLibraryMoveOutcome, total: Int, describe: (Throwable) -> String): MediaLibraryMoveReport {
+  val moved = outcome.movedIds.size
+  if (outcome.notMoved.isEmpty() && outcome.failure == null) {
+    return MediaLibraryMoveReport(movedToOtherLibraryMessage(direction, moved, outcome.rewroteUses), com.aglyn.ui.StatusTone.SUCCESS)
+  }
+  val failure = outcome.failure
+  val message = if (moved == 0 && failure != null) describe(failure) else partialOtherLibraryMessage(direction, moved, total, outcome.rewroteUses, outcome.notMoved)
+  return MediaLibraryMoveReport(message, if (moved > 0) com.aglyn.ui.StatusTone.WARNING else com.aglyn.ui.StatusTone.ERROR)
 }
 
 /** How many files one `/api/media/quarantine` call may ask about (`MAX_PROBE_IDS`). */
