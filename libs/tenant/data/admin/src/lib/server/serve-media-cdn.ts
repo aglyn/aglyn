@@ -54,6 +54,7 @@ import {
   parseMediaCdnScope,
 } from '@aglyn/aglyn/app-utils/media-cdn-scope'
 import { scheduleAfterResponse } from '@aglyn/aglyn/app-utils/after-response'
+import { movedMediaCdnPath } from '@aglyn/aglyn/app-utils/media-library-move'
 import { mediaDeliveryProvider } from '@aglyn/aglyn/plugin-manager/media-delivery-provider'
 import {
   parseSiteIconSpec,
@@ -1261,6 +1262,29 @@ export async function serveMediaCdn(
       .doc(mediaId)
       .get()
     const currentHash = String(snapshot.get('contentHash') ?? '')
+    if (!snapshot.exists) {
+      // A file moved to the other library (site ↔ organization) answers at
+      // its new address. The old one is in pages cached before the move, in
+      // emails already sent and in links people copied; the record the move
+      // left behind says where the file went, and only a missing file pays
+      // for the read.
+      const moved = await firestore
+        .collection(isOrg ? 'orgs' : 'hosts')
+        .doc(scopeId)
+        .collection('mediaMoves')
+        .doc(mediaId)
+        .get()
+      const toScope = String(moved.get('toScope') ?? '')
+      if (moved.exists && parseMediaCdnScope(toScope)) {
+        res.setHeader('Cache-Control', 'public, max-age=300')
+        res.setHeader(
+          'Location',
+          movedMediaCdnPath(toScope, mediaId) + mediaCdnForwardedQuery(req.query),
+        )
+        res.status(308).end()
+        return
+      }
+    }
     if (!snapshot.exists || snapshot.get('deletedAt')) {
       res.setHeader('Cache-Control', 'public, max-age=60')
       res.status(404).json({ error: 'Not found' })

@@ -797,6 +797,9 @@ public struct MediaAPI: Sendable {
     }
   }
 
+  // The move to the other library (site ↔ organization) is `previewLibraryMove` / `moveToOtherLibrary`, in
+  // MediaLibraryMove.swift.
+
   public func createFolder(name: String, parentID: String?) async throws {
     try await post("/api/media/folders", ["action": "create-folder", "name": name, "parentId": parentID])
   }
