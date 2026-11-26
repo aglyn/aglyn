@@ -120,8 +120,8 @@ const SHARED_FOOTER: Array<[string, string]> = [
     'apps/console/components/host-components-card.component.tsx',
   ],
   [
-    'per-screen traffic',
-    'apps/console/components/analytics/screens-analytics-table.component.tsx',
+    'per-page traffic',
+    'apps/console/components/analytics/pages-traffic-table.component.tsx',
   ],
   // Plugin console cards are lists too, and were the worst of the four
   // grammars: a big read sliced small, with no control at all.
@@ -317,7 +317,7 @@ describe('the console has one table footer (AGL-2501)', () => {
       // here: a path that only MENTIONS the constant in prose satisfies a
       // source-text check without the rule holding anywhere.
       'apps/console/components/content/content-scope.context.tsx',
-      'apps/console/components/analytics/screens-analytics-table.component.tsx',
+      'apps/console/components/analytics/pages-traffic-table.component.tsx',
       'libs/shared/ui/jsx/src/lib/components/list-table.component.tsx',
       // The shared window hook, which is where a server-paged list gets its
       // default now — the layouts page used to hold this state itself and no

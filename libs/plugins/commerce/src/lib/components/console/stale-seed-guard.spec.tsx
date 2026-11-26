@@ -500,7 +500,8 @@ describe('DiscountsCard Enable / Disable (AGL-3774)', () => {
  */
 describe('ProductsHubCard stock adjustment (AGL-1358)', () => {
   const openStockDialogAndApply = () => {
-    fireEvent.click(screen.getByRole('button', { name: 'Stock' }))
+    fireEvent.click(screen.getByRole('button', { name: /^More actions for / }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Adjust stock' }))
     fireEvent.change(screen.getByLabelText('Change'), {
       target: { value: '5' },
     })

@@ -18,6 +18,8 @@ import {
   registerPluginRecordRoute,
   type PluginRecordRouteContext,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
+import { hostCollectionKind } from '@aglyn/aglyn/app-utils/collection-kind'
+import { registerSitePathKind } from '@aglyn/aglyn/plugin-manager/site-path-kinds'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { COMMERCE_SETTINGS_PAGE_ZONES } from '../components/commerce-console-sections'
 
@@ -144,6 +146,38 @@ export function registerCommerceRecordRoutes(): void {
       list: (context) => orders(context),
       record: (context, id) => orders(context, ORDERS_ORDER_PARAM, id),
       byEmail: (context, email) => orders(context, ORDERS_CUSTOMER_PARAM, email),
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  /*
+   * The addresses this plugin composes, for the site's Analytics page
+   * (AGL-4253): `/products/{slug}` and `/collections/{slug}` each render
+   * through ONE template screen, so without these every product counted as
+   * one `cr-product` row. Declared, so the page names each visited product
+   * and store collection itself without naming this plugin.
+   */
+  registerSitePathKind(
+    {
+      segment: 'products',
+      groupLabel: 'Products',
+      noun: 'product',
+      collection: 'products',
+      editHref: product,
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerSitePathKind(
+    {
+      segment: 'collections',
+      groupLabel: 'Collections',
+      noun: 'collection',
+      collection: 'collections',
+      // Content collections share the collection and a slug is unique only
+      // within a kind (AGL-954), as the storefront resolver reads it.
+      accepts: (data) => hostCollectionKind(data) === 'catalog',
+      // Store collections are organized on the catalog page; there is no
+      // page of one collection's own to open.
+      editHref: (context) => catalog(context),
     },
     { pluginId: BUNDLE_ID },
   )

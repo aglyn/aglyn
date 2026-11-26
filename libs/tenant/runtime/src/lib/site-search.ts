@@ -33,10 +33,11 @@ import {
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
-import getScreenVersion from '@aglyn/tenant-runtime/get-screen-version'
-import getTemplateScreenIds from '@aglyn/tenant-runtime/template-screens'
+import getScreenVersion from './get-screen-version'
+import getTemplateScreenIds from './template-screens'
+import { retrieveSiteSections } from './site-section-index'
 
-// The result shape and the tab arithmetic live in `search-facets.ts`, which
+// The result shape and the tab arithmetic live in `site-search-facets.ts`, which
 // imports nothing that reaches Firestore — the `'use client'` results page
 // needs `SEARCH_FACET_ALL` as a VALUE, and a value import from THIS module
 // drags the Admin SDK into the browser bundle (AGL-1525). Re-exported here
@@ -44,15 +45,15 @@ import getTemplateScreenIds from '@aglyn/tenant-runtime/template-screens'
 export type {
   SearchFacet,
   SearchResult,
-} from './search-facets'
+} from './site-search-facets'
 export {
   filterSearchResults,
   SEARCH_FACET_ALL,
   SEARCH_FACET_PAGES,
   searchResultFacets,
-} from './search-facets'
+} from './site-search-facets'
 
-import type { SearchResult } from './search-facets'
+import type { SearchResult } from './site-search-facets'
 
 const matches = (haystack: string | undefined, needle: string) =>
   Boolean(haystack && haystack.toLowerCase().includes(needle))
@@ -166,14 +167,59 @@ async function readSearchContent(options: {
 }): Promise<SearchResult[]> {
   const needle = options.query.trim().toLowerCase()
   if (!needle || needle.length > 100) return []
-  const [platform, plugins] = await Promise.all([
+  const [platform, plugins, sections] = await Promise.all([
     readPlatformResults(options),
     readPluginResults(options.host.$id, needle, options.sources),
+    readSectionResults(options.host, needle),
   ])
-  return [...plugins.byTitle, ...platform, ...plugins.byTerms].slice(
+  const listed = new Set(platform.map((result) => result.url))
+  const byText = sections.filter((result) => {
+    if (listed.has(result.url)) return false
+    listed.add(result.url)
+    return true
+  })
+  return [...plugins.byTitle, ...platform, ...byText, ...plugins.byTerms].slice(
     0,
     RESULTS_LIMIT,
   )
+}
+
+/** Sections one query may add as page results. */
+const SECTION_RESULTS_LIMIT = 10
+
+/**
+ * Pages found by what they SAY (AGL-4250), through the site's section index:
+ * the page whose body answers "do you allow dogs" is found though neither its
+ * name nor its description mentions dogs. Ranked by the shared BM25-flavoured
+ * scorer, so the best-answering page comes first; listed after the pages and
+ * entries found by name, which a visitor who typed a name is looking for.
+ * Entries are already searched by their body, so only pages are added here.
+ */
+async function readSectionResults(
+  host: Aglyn.AglynHost,
+  needle: string,
+): Promise<SearchResult[]> {
+  try {
+    const ranked = await retrieveSiteSections(host, needle, SECTION_RESULTS_LIMIT * 2)
+    const seen = new Set<string>()
+    const results: SearchResult[] = []
+    for (const { section } of ranked) {
+      if (section.kind !== 'page' || seen.has(section.url)) continue
+      seen.add(section.url)
+      results.push({
+        title: section.title,
+        url: section.url,
+        snippet: (section.heading ? `${section.heading}: ${section.text}` : section.text).slice(0, 160),
+        kind: 'page',
+      })
+      if (results.length >= SECTION_RESULTS_LIMIT) break
+    }
+    return results
+  } catch (error) {
+    // The index adds to search; it is never a reason for search to fail.
+    console.error(error)
+    return []
+  }
 }
 
 /**

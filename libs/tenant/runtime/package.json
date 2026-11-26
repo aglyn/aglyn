@@ -29,6 +29,7 @@
     "@aglyn/shared-data-types": "1.31.0",
     "@aglyn/shared-ui-theme": "1.31.0",
     "@aglyn/shared-util-http": "1.31.0",
+    "@aglyn/shared-util-vendor": "1.31.0",
     "@aglyn/tenant-data-admin": "1.31.0",
     "@swc/helpers": "0.5.24"
   },
