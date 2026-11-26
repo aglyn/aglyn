@@ -16,6 +16,11 @@
  */
 
 import {
+  normalizeSitePathPattern,
+  sitePathListShows,
+  sitePathPatternMatches,
+} from '@aglyn/aglyn/app-utils/site-path-patterns'
+import {
   LIVE_CHAT_MAX_PATH_LENGTH,
   LIVE_CHAT_MAX_PATHS,
 } from '../constants'
@@ -69,42 +74,19 @@ const PATH_PATTERN = /^\/[A-Za-z0-9\-._~%!$&'()+,;=:@/]*(\/\*)?$/
 
 /** A path the way the matcher compares it: one leading slash, no trailing one. */
 export function normalizeLiveChatPath(raw: string): string {
-  const trimmed = String(raw ?? '').trim()
-  const wildcard = trimmed.endsWith('/*')
-  const base = (wildcard ? trimmed.slice(0, -2) : trimmed)
-    .replace(/\/{2,}/g, '/')
-    .replace(/\/+$/, '')
-  const path = base.startsWith('/') ? base : `/${base}`
-  if (wildcard) return path === '/' ? '/*' : `${path}/*`
-  return path || '/'
+  return normalizeSitePathPattern(raw)
 }
 
-/** Whether one listed address covers a request path. */
 export function liveChatPathMatches(pattern: string, path: string): boolean {
-  const target = normalizeLiveChatPath(path || '/')
-  const normalized = normalizeLiveChatPath(pattern)
-  if (normalized === '/*') return true
-  if (normalized.endsWith('/*')) {
-    const base = normalized.slice(0, -2)
-    return target === base || target.startsWith(`${base}/`)
-  }
-  return target === normalized
+  return sitePathPatternMatches(pattern, path)
 }
 
-/**
- * Whether the chat shows on a page. `pathUnknown` is the designed 404 body,
- * cached per host rather than per URL (AGL-2511): only the path-independent
- * answer — every page — can be given there.
- */
 export function liveChatShowsOnPath(
   settings: Pick<LiveChatSettings, 'pages' | 'paths'>,
   path: string,
   pathUnknown = false,
 ): boolean {
-  if (settings.pages === 'all') return true
-  if (pathUnknown) return false
-  const listed = settings.paths.some((pattern) => liveChatPathMatches(pattern, path))
-  return settings.pages === 'only' ? listed : !listed
+  return sitePathListShows(settings, path, pathUnknown)
 }
 
 export type LiveChatSettingsResult =

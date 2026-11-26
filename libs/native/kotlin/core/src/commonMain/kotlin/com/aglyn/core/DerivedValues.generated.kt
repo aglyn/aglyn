@@ -128,5 +128,6 @@ object ReleaseFlagDefaults {
     "release_site_starters" to ReleaseFlagValue(false, 0, listOf()),
     "release_video_embed_posters" to ReleaseFlagValue(false, 0, listOf()),
     "release_events_calendar_v2" to ReleaseFlagValue(false, 0, listOf()),
+    "release_ai_site_chat" to ReleaseFlagValue(false, 0, listOf()),
   )
 }

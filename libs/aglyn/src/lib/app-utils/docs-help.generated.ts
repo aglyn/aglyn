@@ -167,6 +167,11 @@ export const PLUGIN_DOCS = {
     title: 'Generate a website from a prompt',
     excerpt: 'Generate a website from a prompt: describe a business and an Aglyn AI build job plans a small site — pages, navigation, layout, contact form and palette — then builds it. A guided start publishes it.',
   },
+  aiSiteChat: {
+    path: '/ai/site-chat',
+    title: 'AI chat on your site',
+    excerpt: 'An Aglyn AI chat on your published site that answers visitors from your own pages and products, shows product cards, and adds to the cart or books only when the visitor confirms. Rolling out.',
+  },
   aiSiteLooks: {
     path: '/ai/site-looks',
     title: 'Looks and themes for AI sites',
@@ -624,6 +629,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   aiProducts: ['#write-a-products-copy', '#write-copy-for-many-products', '#when-you-import-products', '#propose-a-first-catalog', '#propose-categories-and-discounts', '#what-the-copy-never-says', '#what-is-sent-to-the-ai-provider', '#who-can-use-it', '#related'],
   aiSeo: ['#write-a-pages-listing', '#write-a-products-listing', '#fix-what-the-seo-check-finds', '#apply-all-as-drafts', '#structured-data-and-llmstxt', '#related'],
   aiSite: ['#starting-a-new-site-from-a-few-questions', '#on-the-free-plan', '#if-the-plan-does-not-work-out', '#what-a-scaffold-builds', '#what-is-published', '#what-it-costs-before-it-starts', '#watching-it-build', '#generate-for-several-sites-at-once'],
+  aiSiteChat: ['#set-up-the-chat', '#what-the-chat-may-do', '#pages', '#conversations', '#credits-and-limits', '#how-the-chat-loads', '#privacy', '#related'],
   aiSiteLooks: ['#choose-a-style', '#each-styles-layout', '#an-ai-starters-look', '#how-the-look-is-made', '#your-theme-afterwards', '#change-the-look-later', '#related'],
   aiStart: ['#how-do-you-want-to-start', '#start-from-an-ai-starter', '#the-questions', '#your-business', '#audience', '#style', '#sites-you-like', '#details', '#review', '#what-it-will-cost', '#what-gets-built', '#building-your-site', '#paused-or-out-of-credits', '#try-again', '#published-and-indexable', '#the-sites-search-listing', '#business-details', '#a-store-from-the-start', '#a-blog-from-the-start', '#events-from-the-start', '#on-the-free-plan', '#who-can-use-it', '#related'],
   aiTemplate: ['#the-three-kinds', '#templates-list', '#installing-from-the-marketplace', '#saving-something-as-a-template', '#using-a-template', '#generate-a-page-template-with-aglyn-ai', '#where-a-template-came-from', '#first-party-starters', '#templates-are-per-site', '#duplicating', '#deleting', '#related'],
@@ -836,6 +842,9 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   },
   aiSite: {
     '#generate-for-several-sites-at-once': 'Generate for several sites at once',
+  },
+  aiSiteChat: {
+    '#set-up-the-chat': 'Set up the chat',
   },
   aiSiteLooks: {
     '#choose-a-style': 'Choose a style',

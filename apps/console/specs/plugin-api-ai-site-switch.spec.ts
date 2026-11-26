@@ -157,6 +157,10 @@ const SITE_DOORS: Record<string, 'GET' | 'POST' | 'PATCH'> = {
   'ai/media/images': 'POST',
   // Create with AI's door in the apps (AGL-3854): it names the list's site.
   'ai/create': 'GET',
+  // The AI chat on a published site (AGL-4250): its owner's settings and the
+  // visitors' conversations, each for the site it names.
+  'ai/site-chat/settings': 'GET',
+  'ai/site-chat/conversations': 'GET',
 }
 
 /**
