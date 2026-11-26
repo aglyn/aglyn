@@ -260,6 +260,15 @@ describe('voice service (AGL-4251)', () => {
     expect(env.twilio.called('sendMessage')[0].args[1]).toMatchObject({ to: '+18305550142', body: 'Sorry we missed you!' })
   })
 
+  it('refuses to place a call outside the US and Canada', async () => {
+    const env = setup()
+    await withNumber(env)
+    await expect(env.voice.placeCall(ORG, { to: '+18765550142', memberCell: '512 555 0000' }, { uid: 'u1' })).rejects.toMatchObject({
+      reason: 'outside-us-ca',
+    })
+    expect(env.twilio.called('createCall')).toHaveLength(0)
+  })
+
   it('places a call by ringing the member first, then bridging from the business number', async () => {
     const env = setup()
     const number = await withNumber(env)

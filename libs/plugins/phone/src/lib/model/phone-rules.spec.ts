@@ -19,6 +19,7 @@ import {
   defaultPhoneSettings,
   fillPhoneTemplate,
   formatPhoneForDisplay,
+  isUsOrCanadaNumber,
   inboundKeyword,
   isOpenAt,
   missingComplianceFields,
@@ -97,5 +98,16 @@ describe('phone rules (AGL-4251)', () => {
     expect(inboundKeyword('UNSUBSCRIBE')).toBe('stop')
     expect(inboundKeyword('start')).toBe('start')
     expect(inboundKeyword('stop by tomorrow?')).toBeNull()
+  })
+
+  it('calls and forwards within the US and Canada only', () => {
+    expect(isUsOrCanadaNumber('+18305550142')).toBe(true)
+    expect(isUsOrCanadaNumber('+14165550142')).toBe(true)
+    expect(isUsOrCanadaNumber('+17875550142')).toBe(true)
+    expect(isUsOrCanadaNumber('+18765550142')).toBe(false)
+    expect(isUsOrCanadaNumber('+442079460958')).toBe(false)
+    expect(sanitizePhoneSettings({ forwardTo: ['+18765550142', '+15125550000'] }, defaultPhoneSettings(1), 2).forwardTo).toEqual([
+      '+15125550000',
+    ])
   })
 })

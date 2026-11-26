@@ -22,11 +22,15 @@ Phone is an add-on on the **Starter** and **Pro** plans: **$15 a month**.
 It includes:
 
 - one business number, local or toll-free;
-- **300 minutes** of calls a month, in or out, voicemail included;
+- **unlimited calls** within the US and Canada, in or out;
+- **unlimited voicemail**, written out as text;
 - **300 texts** a month, sent or received.
 
-Past those, minutes and texts are billed at cost + 30%, on the same usage
-line as storage and bandwidth. Turn it on under **Billing → Add-ons → Phone**.
+Texts past the 300 are billed at cost + 30%, on the same usage line as
+storage and bandwidth. Calls are for your business's own customers, under
+fair use: Phone calls and forwards to US and Canadian numbers only, and a
+workspace can place a limited number of calls and texts an hour. Turn it on
+under **Billing → Add-ons → Phone**.
 
 ## Choose your number
 
@@ -77,7 +81,7 @@ number that has not texted you yet.
 ## Calls
 
 During your business hours, a call rings the **cell phones** you list on
-**Settings**, all at once. The first person to answer takes it, and they see
+**Settings** (US and Canadian numbers), all at once. The first person to answer takes it, and they see
 the caller's number. If nobody answers, or the call comes outside your hours,
 the caller hears your greeting and can leave a voicemail.
 

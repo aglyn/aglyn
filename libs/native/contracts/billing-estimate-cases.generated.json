@@ -44,7 +44,7 @@
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
         "assistCreditsPerMonth": 300,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -112,7 +112,7 @@
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
         "assistCreditsPerMonth": 300,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -185,7 +185,7 @@
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
         "assistCreditsPerMonth": 300,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -253,7 +253,7 @@
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
         "assistCreditsPerMonth": 300,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -316,7 +316,7 @@
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
         "assistCreditsPerMonth": 300,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -384,7 +384,7 @@
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
         "assistCreditsPerMonth": 300,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -452,7 +452,7 @@
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
         "assistCreditsPerMonth": 750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -520,7 +520,7 @@
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
         "assistCreditsPerMonth": 750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -593,7 +593,7 @@
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
         "assistCreditsPerMonth": 750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -661,7 +661,7 @@
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
         "assistCreditsPerMonth": 750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -724,7 +724,7 @@
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
         "assistCreditsPerMonth": 750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -792,7 +792,7 @@
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
         "assistCreditsPerMonth": 750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -860,7 +860,7 @@
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
         "assistCreditsPerMonth": 2750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -928,7 +928,7 @@
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
         "assistCreditsPerMonth": 2750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -1001,7 +1001,7 @@
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
         "assistCreditsPerMonth": 2750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -1069,7 +1069,7 @@
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
         "assistCreditsPerMonth": 2750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -1132,7 +1132,7 @@
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
         "assistCreditsPerMonth": 2750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -1200,7 +1200,7 @@
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
         "assistCreditsPerMonth": 2750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -1268,7 +1268,7 @@
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
         "assistCreditsPerMonth": 116000,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -1336,7 +1336,7 @@
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
         "assistCreditsPerMonth": 116000,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -1409,7 +1409,7 @@
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
         "assistCreditsPerMonth": 116000,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -1477,7 +1477,7 @@
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
         "assistCreditsPerMonth": 116000,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -1540,7 +1540,7 @@
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
         "assistCreditsPerMonth": 116000,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -1608,7 +1608,7 @@
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
         "assistCreditsPerMonth": 116000,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "sites": [
@@ -1677,7 +1677,7 @@
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
         "assistCreditsPerMonth": 300,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "records": {
@@ -1745,7 +1745,7 @@
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
         "assistCreditsPerMonth": 300,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "records": {
@@ -1813,7 +1813,7 @@
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
         "assistCreditsPerMonth": 300,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "records": {
@@ -1881,7 +1881,7 @@
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
         "assistCreditsPerMonth": 300,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "records": {
@@ -1949,7 +1949,7 @@
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
         "assistCreditsPerMonth": 750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "records": {
@@ -2017,7 +2017,7 @@
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
         "assistCreditsPerMonth": 750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "records": {
@@ -2085,7 +2085,7 @@
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
         "assistCreditsPerMonth": 750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "records": {
@@ -2153,7 +2153,7 @@
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
         "assistCreditsPerMonth": 750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "records": {
@@ -2221,7 +2221,7 @@
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
         "assistCreditsPerMonth": 2750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "records": {
@@ -2289,7 +2289,7 @@
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
         "assistCreditsPerMonth": 2750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "records": {
@@ -2357,7 +2357,7 @@
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
         "assistCreditsPerMonth": 2750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "records": {
@@ -2425,7 +2425,7 @@
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
         "assistCreditsPerMonth": 2750,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "records": {
@@ -2493,7 +2493,7 @@
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
         "assistCreditsPerMonth": 116000,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "records": {
@@ -2561,7 +2561,7 @@
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
         "assistCreditsPerMonth": 116000,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "records": {
@@ -2629,7 +2629,7 @@
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
         "assistCreditsPerMonth": 116000,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "records": {
@@ -2697,7 +2697,7 @@
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
         "assistCreditsPerMonth": 116000,
-        "phoneMinutesPerMonth": 0,
+        "phoneMinutesPerMonth": null,
         "phoneTextsPerMonth": 0
       },
       "records": {

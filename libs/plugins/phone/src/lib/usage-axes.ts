@@ -24,10 +24,12 @@ import {
 } from './constants/usage'
 
 /**
- * PHONE'S METERS (AGL-4251): call minutes and text segments, in the
- * platform's cost model and as two infrastructure meters billed at cost + 30%
- * (kept after card fees) past the pool the Phone add-on includes. Compiled
- * into core by the manifest generator (`register.usageAxes`).
+ * PHONE'S METERS (AGL-4251): call minutes and text segments in the platform's
+ * cost model, and texts as an infrastructure meter billed at cost + 30% (kept
+ * after card fees) past the pool the Phone add-on includes. Calls within the
+ * US and Canada are unlimited, so minutes are a COST axis only — counted for
+ * the margin, never billed. Compiled into core by the manifest generator
+ * (`register.usageAxes`).
  *
  * Counted on the per-site counter of the site each number answers for, so the
  * usage sweep and the Billing estimate read them like form submissions. The
@@ -45,18 +47,15 @@ export function phoneUsageAxes(): PluginUsageAxesDeclaration {
     ],
     bands: [
       {
+        // Counted, never billed: the usage sweep sums the per-site counter
+        // into the rollup's `phoneMinutes`, which the cost axis above prices.
+        // The entitlement is unlimited with the add-on.
         id: 'phoneMinutes',
         label: 'Phone minutes',
         order: 74,
         fields: ['phoneMinutes'],
         entitlement: PHONE_MINUTES_QUOTA,
         hostCounter: PHONE_MINUTES_COUNTER,
-        metered: {
-          rate: 'perPhoneMinute',
-          quotedPer: 1,
-          noun: 'phone minutes',
-          withheldUntil: 'release_phone',
-        },
       },
       {
         id: 'phoneTexts',

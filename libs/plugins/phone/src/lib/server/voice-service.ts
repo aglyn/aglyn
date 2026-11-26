@@ -16,7 +16,7 @@
  */
 
 import { PHONE_API_ROUTES } from '../constants/api-routes'
-import { isOpenAt, phoneE164, phoneThreadId } from '../model/phone-rules'
+import { isOpenAt, isUsOrCanadaNumber, phoneE164, phoneThreadId } from '../model/phone-rules'
 import type { PhoneCall, PhoneCallStatus, PhoneNumberRecord, PhoneSettings } from '../model/phone.types'
 import { describeCallForTimeline } from '../model/phone-call-words'
 import { twiml, type TwimlNode } from '../twilio/twiml'
@@ -103,7 +103,9 @@ export function createVoiceService(deps: PhoneServiceDeps, phone: PhoneService) 
       }
       await repo.putCall(orgId, call)
       const open = isOpenAt(settings, nowMs)
-      const cells = settings.forwardTo.filter((cell) => cell !== number.e164 && cell !== from)
+      const cells = settings.forwardTo.filter(
+        (cell) => cell !== number.e164 && cell !== from && isUsOrCanadaNumber(cell),
+      )
       if (!open || !cells.length) {
         return twiml(
           voicemail(orgId, callId, open ? settings.voicemailGreeting : settings.closedGreeting, settings.voicemailTranscription),
@@ -245,6 +247,11 @@ export function createVoiceService(deps: PhoneServiceDeps, phone: PhoneService) 
       const cell = phoneE164(input.memberCell)
       if (!to) throw new PhoneServiceError(400, 'invalid-number', 'That does not read as a phone number.')
       if (!cell) throw new PhoneServiceError(400, 'cell-required', 'Enter your own cell number, so Phone can ring you first.')
+      // Unlimited calling covers the US and Canada only (fair use, and the
+      // numbers international toll fraud dials are outside it).
+      if (!isUsOrCanadaNumber(to) || !isUsOrCanadaNumber(cell)) {
+        throw new PhoneServiceError(400, 'outside-us-ca', 'Phone calls numbers in the US and Canada only.')
+      }
       if (!twilio.isConfigured()) throw new PhoneServiceError(503, 'not-configured', 'Phone is not set up on this server yet.')
       const account = await repo.getAccount(orgId)
       const numbers = (await repo.listNumbers(orgId)).filter((one) => one.status === 'active')

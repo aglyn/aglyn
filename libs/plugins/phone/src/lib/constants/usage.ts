@@ -26,9 +26,14 @@
  * is counted. The plugin records COUNTS only; core prices them.
  */
 
-/** Minutes of calls (in or out, voicemail included) one Phone add-on includes a month. */
-export const PHONE_INCLUDED_MINUTES_PER_UNIT = 300
-
+/**
+ * Calls are UNLIMITED within the US and Canada, voicemail and its transcripts
+ * included: there is no minutes pool and no minutes overage. Minutes are still
+ * counted on `PHONE_MINUTES_COUNTER` for the cost model. Fair use is held by
+ * the per-workspace hourly ceiling every call placed from Phone spends
+ * (`PHONE_SENDS_PER_HOUR_PER_ORG`) and by {@link isUsOrCanadaNumber}: Phone
+ * dials and forwards to US and Canadian numbers only.
+ */
 /** Text segments (sent or received) one Phone add-on includes a month. */
 export const PHONE_INCLUDED_TEXTS_PER_UNIT = 300
 
@@ -36,12 +41,12 @@ export const PHONE_INCLUDED_TEXTS_PER_UNIT = 300
 export const PHONE_MINUTES_COUNTER = 'phoneMinutes'
 export const PHONE_TEXTS_COUNTER = 'phoneTexts'
 
-/** The entitlement keys the pool is held in. */
-export const PHONE_MINUTES_QUOTA = 'phoneMinutesPerMonth'
+/** The entitlement keys: the texts pool, and the minutes (unlimited, counted for cost). */
 export const PHONE_TEXTS_QUOTA = 'phoneTextsPerMonth'
+export const PHONE_MINUTES_QUOTA = 'phoneMinutesPerMonth'
 
 /** Longest text the composer sends: ten segments. */
 export const PHONE_MAX_BODY_CHARS = 1600
 
-/** Texts a workspace's number may send per rolling hour. */
+/** Texts and calls placed from a workspace's number per rolling hour. */
 export const PHONE_SENDS_PER_HOUR_PER_ORG = 200

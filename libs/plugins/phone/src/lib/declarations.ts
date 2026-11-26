@@ -18,12 +18,7 @@
 import { registerPluginEntitlements } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
 import { registerPluginPermissions } from '@aglyn/aglyn/plugin-manager/plugin-permissions'
 import { PHONE_ADDON_KEY, PHONE_FEATURE, PHONE_PERMISSIONS, PHONE_PLUGIN_ID } from './constants/bundle-common'
-import {
-  PHONE_INCLUDED_MINUTES_PER_UNIT,
-  PHONE_INCLUDED_TEXTS_PER_UNIT,
-  PHONE_MINUTES_QUOTA,
-  PHONE_TEXTS_QUOTA,
-} from './constants/usage'
+import { PHONE_INCLUDED_TEXTS_PER_UNIT, PHONE_TEXTS_QUOTA } from './constants/usage'
 
 /**
  * Phone's DECLARATIONS (AGL-4251), loaded by both apps before any surface:
@@ -31,7 +26,8 @@ import {
  * permission keys. Nothing here reaches Firestore, Twilio or React.
  *
  * One unit of the `phone` add-on switches the `phone` feature on and adds
- * the included pool to both quotas, on every plan that sells it. The price is
+ * the included texts to the texts quota, on every plan that sells it. Calls
+ * within the US and Canada are unlimited, so there is no minutes quota. The price is
  * core's (`PHONE_ADDON_MONTHLY_USD`), and which plans sell it is core's
  * add-on table; this names keys and the pool.
  */
@@ -55,10 +51,7 @@ export function registerPhoneDeclarations(): void {
         key: PHONE_ADDON_KEY,
         label: 'Phone',
         maxUnits: 1,
-        quotas: [
-          { key: PHONE_MINUTES_QUOTA, perUnitByPlan: PER_UNIT_EVERY_PLAN(PHONE_INCLUDED_MINUTES_PER_UNIT) },
-          { key: PHONE_TEXTS_QUOTA, perUnitByPlan: PER_UNIT_EVERY_PLAN(PHONE_INCLUDED_TEXTS_PER_UNIT) },
-        ],
+        quota: { key: PHONE_TEXTS_QUOTA, perUnitByPlan: PER_UNIT_EVERY_PLAN(PHONE_INCLUDED_TEXTS_PER_UNIT) },
         features: [PHONE_FEATURE],
         soldOn: (plan) => plan === 'starter' || plan === 'pro',
       },

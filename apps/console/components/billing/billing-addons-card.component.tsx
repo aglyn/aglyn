@@ -91,14 +91,15 @@ export const TOGGLE_ADDON_KINDS: ReadonlySet<string> = new Set([
  */
 /**
  * The Phone row's sentence (AGL-4251). The pool figures are the phone
- * plugin's (`PHONE_INCLUDED_MINUTES_PER_UNIT`, `PHONE_INCLUDED_TEXTS_PER_UNIT`),
+ * plugin's (`PHONE_INCLUDED_TEXTS_PER_UNIT`),
  * restated here as words because the billing card never loads a plugin;
  * change both together.
  */
 export const PHONE_ADDON_DESCRIPTION =
-  'A business number for your workspace: two-way texts with customers, calls ' +
-  'forwarded to your team, and voicemail written out as text. Includes 300 ' +
-  'minutes and 300 texts a month; more are billed at cost + 30%.'
+  'A business number for your workspace: unlimited calls within the US and ' +
+  'Canada, forwarded to your team, unlimited voicemail written out as text, ' +
+  'and two-way texts with customers. Includes 300 texts a month; more are ' +
+  'billed at cost + 30%.'
 
 export const SITE_CARE_DESCRIPTION =
   'We make your site changes for you: hours, prices, photos, a staff ' +

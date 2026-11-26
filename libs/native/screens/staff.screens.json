@@ -22938,7 +22938,7 @@
             },
             {
               "key": "quota.phoneMinutesPerMonth",
-              "label": "Limit: Phone min / mo",
+              "label": "Limit: Phone min / mo (with Phone)",
               "kind": "number",
               "initial": "{item.entitlements.phoneMinutesPerMonth}",
               "help": "Empty inherits the plan default. 0 is a real limit of none."

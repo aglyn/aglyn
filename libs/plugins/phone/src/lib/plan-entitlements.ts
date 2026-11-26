@@ -22,7 +22,12 @@ import type { PluginPlanEntitlementsDeclaration } from '@aglyn/aglyn/plugin-mana
 
 declare module '@aglyn/aglyn/plugin-manager/plugin-entitlement-keys' {
   interface PluginEntitlementQuotas {
-    /** Call minutes a month the workspace's Phone add-on includes (0 without it). */
+    /**
+     * Call minutes a month within the US and Canada: UNLIMITED on every plan,
+     * because calls are unlimited with the Phone add-on and nothing calls
+     * without it (the `phone` feature gates every route). A band only so the
+     * usage sweep counts minutes for the cost model.
+     */
     phoneMinutesPerMonth?: number
     /** Text segments a month the workspace's Phone add-on includes (0 without it). */
     phoneTextsPerMonth?: number
@@ -34,16 +39,24 @@ declare module '@aglyn/aglyn/plugin-manager/plugin-entitlement-keys' {
 }
 
 const NONE: Readonly<Record<OrgPlan, number>> = { free: 0, starter: 0, pro: 0, enterprise: 0 }
+const UNLIMITED_EVERY_PLAN: Readonly<Record<OrgPlan, number>> = {
+  free: Infinity,
+  starter: Infinity,
+  pro: Infinity,
+  enterprise: Infinity,
+}
 
 /**
  * THE PHONE PLUGIN'S PLAN FIGURES (AGL-4251). No plan includes Phone: it is a
- * $15/mo add-on, and one unit of it adds the pool (`declarations.ts`). So
+ * $15/mo add-on, and one unit of it adds the texts pool (`declarations.ts`);
+ * calls are unlimited within the US and Canada, so the minutes key is
+ * unlimited everywhere and exists only so minutes are counted for cost. So
  * every plan includes nothing here, and the add-on fold is what raises it.
  */
 export function phonePlanEntitlements(): PluginPlanEntitlementsDeclaration {
   return {
     quotas: [
-      { key: 'phoneMinutesPerMonth', label: 'Phone min / mo', byPlan: NONE },
+      { key: 'phoneMinutesPerMonth', label: 'Phone min / mo (with Phone)', byPlan: UNLIMITED_EVERY_PLAN },
       { key: 'phoneTextsPerMonth', label: 'Phone texts / mo', byPlan: NONE },
     ],
     features: [

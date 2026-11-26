@@ -1019,9 +1019,10 @@ export const SITE_CARE_ADDON_MONTHLY_USD = 49
 
 /**
  * Aglyn Phone, the business-number add-on (AGL-4251): $15 a month, flat, on
- * Starter and Pro. It includes one number and a pool of minutes and texts
- * (the phone plugin's declaration); use past the pool is metered at cost +
- * 30% like the other infrastructure meters. Not on Free (no subscription to
+ * Starter and Pro. It includes one number, unlimited calls within the US and
+ * Canada, unlimited voicemail with transcripts, and a pool of 300 texts (the
+ * phone plugin's declaration); texts past the pool are metered at cost + 30%
+ * like the other infrastructure meters. Not on Free (no subscription to
  * carry it) or Enterprise (quoted per deal) — {@link planSellsPhone}.
  */
 export const PHONE_ADDON_MONTHLY_USD = 15
@@ -2532,7 +2533,8 @@ export const ORG_COGS_UNIT_RATES_USD = {
   perFormSubmission: 0.000061538462,
   /**
    * Aglyn Phone (AGL-4251): one call minute and one text segment, at Twilio's
-   * published US list prices read 2026-11-26. A minute is priced at the
+   * published US list prices read 2026-11-26. The minute is a cost-model rate
+   * only: calls within the US and Canada are unlimited and never billed. A minute is priced at the
    * dearest leg it can take — an inbound minute forwarded to a cell is $0.0085
    * in plus $0.014 out, and a voicemail minute adds $0.0025 of recording —
    * rounded up to $0.025. A segment is $0.0083 plus the typical US carrier

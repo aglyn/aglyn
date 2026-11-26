@@ -2194,12 +2194,12 @@ export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
   {
     "pluginId": "business-phone",
     "key": "phoneMinutesPerMonth",
-    "label": "Phone min / mo",
+    "label": "Phone min / mo (with Phone)",
     "byPlan": {
-      "free": 0,
-      "starter": 0,
-      "pro": 0,
-      "enterprise": 0
+      "free": Infinity,
+      "starter": Infinity,
+      "pro": Infinity,
+      "enterprise": Infinity
     }
   },
   {
@@ -2401,13 +2401,7 @@ export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
       "phoneMinutes"
     ],
     "entitlement": "phoneMinutesPerMonth",
-    "hostCounter": "phoneMinutes",
-    "metered": {
-      "rate": "perPhoneMinute",
-      "quotedPer": 1,
-      "noun": "phone minutes",
-      "withheldUntil": "release_phone"
-    }
+    "hostCounter": "phoneMinutes"
   },
   {
     "pluginId": "business-phone",

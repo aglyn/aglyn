@@ -33,6 +33,22 @@ export function phoneE164(input: unknown): string | null {
   return normalizePhone(typeof input === 'string' ? input : String(input ?? ''))
 }
 
+/**
+ * North American area codes that are NOT the US or Canada: the Caribbean
+ * nations and Bermuda. Phone's calls are unlimited within the US and Canada
+ * only, and these are where international toll fraud dials.
+ */
+const NANP_OUTSIDE_US_CA = new Set([
+  '242', '246', '264', '268', '284', '345', '441', '473', '649', '658', '664', '721',
+  '758', '767', '784', '809', '829', '849', '868', '869', '876',
+])
+
+/** Whether an E.164 number is in the US (territories included) or Canada. */
+export function isUsOrCanadaNumber(e164: string | null | undefined): boolean {
+  const match = /^\+1(\d{3})\d{7}$/.exec(String(e164 ?? ''))
+  return Boolean(match && !NANP_OUTSIDE_US_CA.has(match[1]))
+}
+
 /** "(830) 555-0142" for a North American number, else the E.164 as is. */
 export function formatPhoneForDisplay(e164: string): string {
   const match = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(e164)
@@ -172,7 +188,7 @@ export function sanitizePhoneSettings(input: unknown, current: PhoneSettings, no
         }))
     : current.hours
   const forwardTo = Array.isArray(raw['forwardTo'])
-    ? [...new Set((raw['forwardTo'] as unknown[]).map(phoneE164).filter((n): n is string => !!n))].slice(0, 5)
+    ? [...new Set((raw['forwardTo'] as unknown[]).map(phoneE164).filter((n): n is string => isUsOrCanadaNumber(n)))].slice(0, 5)
     : current.forwardTo
   const ring = raw['ringDuringHours']
   const templates = Array.isArray(raw['templates'])

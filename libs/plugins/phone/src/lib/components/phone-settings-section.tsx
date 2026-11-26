@@ -146,7 +146,7 @@ export function PhoneSettingsSection({ api, status, reload }: PhoneSectionProps)
           <TextField
             size="small"
             label="Ring these cell phones"
-            helperText="Up to five numbers, separated by commas. Every one rings at once; the first to answer takes the call."
+            helperText="Up to five US or Canadian numbers, separated by commas. Every one rings at once; the first to answer takes the call."
             value={settings.forwardTo.join(', ')}
             disabled={locked}
             onChange={(event) =>
