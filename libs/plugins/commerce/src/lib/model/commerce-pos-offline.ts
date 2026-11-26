@@ -17,7 +17,7 @@
 
 import { computeOrderTotals, type OrderLineItem, type OrderTotals } from './commerce-orders'
 import { computeTaxCents } from './commerce-tax'
-import type { ModifierSelection } from './product-modifiers'
+import { cleanWriteIn, type ModifierSelection } from './product-modifiers'
 import { POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT } from './pos-offline-card-limits'
 
 /*==========================================
@@ -470,7 +470,10 @@ export function sanitizePosOfflineSale(
     const modifiers = Array.isArray(line?.modifiers)
       ? (line.modifiers as unknown[])
           .slice(0, 50)
-          .map((pick: any) => ({ groupId: cleanId(pick?.groupId), optionId: cleanId(pick?.optionId) }))
+          .map((pick: any) => {
+            const text = cleanWriteIn(pick?.text)
+            return { groupId: cleanId(pick?.groupId), optionId: cleanId(pick?.optionId), ...(text ? { text } : {}) }
+          })
           .filter((pick) => pick.groupId && pick.optionId)
       : []
     lines.push({
