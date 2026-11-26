@@ -17,6 +17,8 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiCalendarMonthOutline } from '@aglyn/shared-data-mdi'
+import * as EventCalendar from './components/event-calendar'
+import * as EventDetails from './components/event-details'
 import * as EventList from './components/event-list'
 import { BUNDLE_ID } from './constants/bundle-common'
 
@@ -34,6 +36,18 @@ export const EVENTS_CALENDAR_BUNDLE: Aglyn.FeatureBundleEntry[] = [
     component: EventList.default,
     schema: EventList.schema,
     presets: EventList.presets,
+  },
+  // Calendar v2 (AGL-4252). Each answers nothing until the workspace's
+  // `release_events_calendar_v2` is on: its door says `enabled: false`.
+  {
+    component: EventCalendar.default,
+    schema: EventCalendar.schema,
+    presets: EventCalendar.presets,
+  },
+  {
+    component: EventDetails.default,
+    schema: EventDetails.schema,
+    presets: EventDetails.presets,
   },
 ]
 

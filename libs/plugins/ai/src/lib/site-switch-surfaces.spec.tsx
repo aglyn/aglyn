@@ -90,6 +90,9 @@ const SITE_ZONES: readonly string[] = [
   // workspace's, the way the CRM's zones below are.
   CONSOLE_WIDGET_SLOTS.mediaLibrary,
   CONSOLE_WIDGET_SLOTS.hostSeo,
+  // The AI chat's card on a site's Setup page (AGL-4250): about one site's
+  // published pages, so a site that switched AI off shows none.
+  CONSOLE_WIDGET_SLOTS.hostSettings,
   // What Aglyn AI learned on the site's Business profile (AGL-3661): about one
   // site, so a site that switched AI off shows none.
   CONSOLE_WIDGET_SLOTS.hostBusinessProfile,

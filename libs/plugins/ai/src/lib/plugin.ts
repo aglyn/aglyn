@@ -33,6 +33,9 @@ import { lazyWidget } from './lazy-widget'
 /** What a page shows while its code arrives. */
 const PAGE_LOADING = createElement(LinearProgress, { 'aria-label': 'Loading' })
 
+const SiteChatCard = lazyWidget('SiteChatCard', () =>
+  import('./components/site-chat-card.component').then((m) => m.SiteChatCard),
+)
 const AiSaveAsComponent = lazyWidget('AiSaveAsComponent', () =>
   import('./components/ai-save-as-component.component').then(
     (m) => m.AiSaveAsComponent,
@@ -400,6 +403,15 @@ export function registerAiConsole(): void {
       },
     ],
     widgets: [
+      // The AI chat on the published site (AGL-4250): its settings, figures
+      // and the visitors' conversations, on the site's Setup page. The card
+      // draws nothing for a workspace the release flag is off for.
+      {
+        slot: 'hostSettings',
+        widgetId: 'ai-site-chat-settings',
+        title: 'AI chat',
+        Component: SiteChatCard,
+      },
       {
         slot: 'consoleDock',
         widgetId: 'ai-assist-dock',

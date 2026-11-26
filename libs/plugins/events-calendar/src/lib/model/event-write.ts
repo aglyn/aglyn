@@ -16,6 +16,17 @@
  */
 
 import { MEDIA_ALT_MAX_LENGTH } from '@aglyn/aglyn/app-utils/media-alt'
+import { isValidTimeZone } from '@aglyn/shared-util-timestamp/zoned-time'
+import {
+  eventCategoryIdsOf,
+  eventTicketOf,
+  type EventTicket,
+} from './event-categories'
+import {
+  eventRecurrenceOf,
+  eventSeriesEndsAtMs,
+  type EventRecurrence,
+} from './event-recurrence'
 
 /**
  * THE ONE RULE FOR WHAT AN EVENT STORES.
@@ -70,6 +81,20 @@ export interface EventWriteInput {
   coverImage?: string | null
   coverImageAlt?: string | null
   status: EventStatus
+  /*
+   * The calendar v2 fields (AGL-4252). For each, `undefined` means "this
+   * writer does not know the field" and leaves what is stored alone, so a
+   * writer from before them (the native apps, a v1 console) never wipes a
+   * series; `null` or an empty value clears it.
+   */
+  /** The site's event categories this event is in, by id. */
+  categoryIds?: readonly string[] | null
+  /** The IANA zone the event's repeat rule and day keys are read in. */
+  timeZone?: string | null
+  /** How the event repeats; see `event-recurrence.ts`. */
+  recurrence?: unknown
+  /** The product or bookings service a visitor buys a place with. */
+  ticket?: unknown
 }
 
 /** The content fields an event document stores. */
@@ -83,11 +108,29 @@ export interface EventStoredFields {
   coverImage?: string
   coverImageAlt?: string
   status: EventStatus
+  categoryIds?: string[]
+  timeZone?: string
+  recurrence?: EventRecurrence
+  ticket?: EventTicket
+  /**
+   * When the series' last occurrence ends (`eventSeriesEndsAtMs`): what a
+   * date-range read asks for, so a weekly practice that began last year is
+   * found for next week. Written by every writer that knows `recurrence`.
+   */
+  seriesEndsAtMs?: number
 }
 
 /** The optional fields a write can take off a stored event. */
 export type EventRemovableField =
-  'location' | 'organizer' | 'description' | 'coverImage' | 'coverImageAlt'
+  | 'location'
+  | 'organizer'
+  | 'description'
+  | 'coverImage'
+  | 'coverImageAlt'
+  | 'categoryIds'
+  | 'timeZone'
+  | 'recurrence'
+  | 'ticket'
 
 /** What to store: the fields to write and the stored fields to delete. */
 export interface EventWrite {
@@ -155,7 +198,7 @@ export function eventWrite(
     status: input.status,
   }
   const optional: Array<
-    [Exclude<EventRemovableField, 'coverImageAlt'>, number]
+    ['location' | 'organizer' | 'description' | 'coverImage', number]
   > = [
     ['location', EVENT_LOCATION_MAX_LENGTH],
     ['organizer', EVENT_ORGANIZER_MAX_LENGTH],
@@ -170,5 +213,30 @@ export function eventWrite(
   const alt = capped(input.coverImageAlt, EVENT_COVER_ALT_MAX_LENGTH)
   if (fields.coverImage && alt) fields.coverImageAlt = alt
   else remove.push('coverImageAlt')
+  if (input.categoryIds !== undefined) {
+    const ids = eventCategoryIdsOf(input.categoryIds)
+    if (ids.length) fields.categoryIds = ids
+    else remove.push('categoryIds')
+  }
+  if (input.timeZone !== undefined) {
+    if (isValidTimeZone(input.timeZone)) fields.timeZone = input.timeZone as string
+    else remove.push('timeZone')
+  }
+  if (input.ticket !== undefined) {
+    const ticket = eventTicketOf(input.ticket)
+    if (ticket) fields.ticket = ticket
+    else remove.push('ticket')
+  }
+  if (input.recurrence !== undefined) {
+    const rule = eventRecurrenceOf(input.recurrence)
+    if (rule) fields.recurrence = rule
+    else remove.push('recurrence')
+    fields.seriesEndsAtMs = eventSeriesEndsAtMs({
+      startsAtMs: fields.startsAtMs,
+      endsAtMs: fields.endsAtMs,
+      timeZone: fields.timeZone ?? (typeof input.timeZone === 'string' ? input.timeZone : null),
+      recurrence: rule,
+    })
+  }
   return { fields, remove }
 }

@@ -104,3 +104,7 @@ A plugin may import the tenant runtime, the renderer, the Besigner logic, the co
 ## License
 
 Apache-2.0. Source: https://github.com/aglyn/aglyn/tree/main/libs/plugins/commerce
+
+## Site offers and stays search (AGL-4252)
+
+The server declarations also register a `stays` source of the site's search (`core.site-search`, behind `release_events_calendar_v2`: each reservation resource with a **Page on your site**, `pagePath`) and the `product` kind for `core.site-offers`, so another plugin's button (an events calendar's "Get tickets") puts a product in the cart, with its use day when the product asks for one.

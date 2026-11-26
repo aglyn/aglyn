@@ -43,6 +43,14 @@ export function orderPaidCents(order: OrderFigureSource): number {
     totals?: { totalCents?: number }
     amountCents?: number
     refundedCents?: number
+    baseTotals?: { totalCents?: number }
+    fxRate?: number
+  }
+  // An order paid in another currency counts in the store's (AGL-4248), so
+  // a day of NZD and USD sales adds up in one currency.
+  const rate = Number(lifted.fxRate ?? 0)
+  if (typeof lifted.baseTotals?.totalCents === 'number' && rate > 0) {
+    return lifted.baseTotals.totalCents - Math.round((lifted.refundedCents ?? 0) / rate)
   }
   return (lifted.totals?.totalCents ?? lifted.amountCents ?? 0) - (lifted.refundedCents ?? 0)
 }

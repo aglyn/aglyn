@@ -40,6 +40,10 @@ import {
   type PluginSiteSearchSource,
 } from '@aglyn/aglyn/plugin-manager/plugin-site-search'
 import {
+  registerPluginSiteOffer,
+  type PluginSiteOfferSource,
+} from '@aglyn/aglyn/plugin-manager/plugin-site-offers'
+import {
   registerPluginStockLevels,
   type PluginStockLevels,
 } from '@aglyn/aglyn/plugin-manager/plugin-stock-levels'
@@ -51,7 +55,12 @@ import {
   registerPluginProductWriter,
   type PluginProductWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-product-writer'
+import {
+  registerPluginSiteChatTool,
+  registerPluginSiteChatVisitorReader,
+} from '@aglyn/aglyn/plugin-manager/plugin-site-chat-tools'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { COMMERCE_SITE_CHAT_TOOLS } from './site-chat-tool-definitions'
 import { COMMERCE_OPERATOR_ALERTS } from './constants/operator-alerts'
 import { registerCommerceEventTriggers } from './server/order-event-triggers'
 
@@ -113,6 +122,13 @@ export function registerCommerceServerDeclarations(): void {
   // The store's products in the site's own search page: what the storefront
   // lists, linked to each product's page. The reads load with the first search.
   registerPluginSiteSearchSource(lazySiteSearch, { pluginId: BUNDLE_ID })
+  // Its stays (cabins, hookups, tent sites) beside them (AGL-4252), each
+  // linked to the page its owner named for it.
+  registerPluginSiteSearchSource(lazyStaysSearch, { pluginId: BUNDLE_ID })
+  // A product as another plugin's button sells it (AGL-4252): an events
+  // calendar's "Get tickets" puts it in the cart, with the event's day as its
+  // use day when the product asks for one.
+  registerPluginSiteOffer('product', lazyProductOffer, { pluginId: BUNDLE_ID })
   // Counts another warehouse keeps, applied as a stock-take (AGL-3634): a
   // fulfillment network says how many it can ship and the products say so.
   registerPluginStockLevels(lazyStockLevels, { pluginId: BUNDLE_ID })
@@ -122,6 +138,27 @@ export function registerCommerceServerDeclarations(): void {
   // Orders a marketplace sold (AGL-3638), recorded as this plugin's own:
   // numbered, their units off the same shelf in the same write, announced.
   registerPluginChannelOrders(lazyChannelOrders, { pluginId: BUNDLE_ID })
+  // The store's tools for the AI chat on its site (AGL-4250): product
+  // details, a stay's dates, and the add-to-cart and reservation cards the
+  // visitor confirms; and a signed-in member's first name for its greeting.
+  // Definitions only at boot; the reads load with the first call.
+  for (const definition of COMMERCE_SITE_CHAT_TOOLS) {
+    registerPluginSiteChatTool(
+      {
+        ...definition,
+        run: async (request) =>
+          (await import('./server/site-chat-tools')).runCommerceSiteChatTool(definition.name, request),
+      },
+      { pluginId: BUNDLE_ID },
+    )
+  }
+  registerPluginSiteChatVisitorReader(
+    {
+      readVisitor: async (request) =>
+        (await import('./server/site-chat-visitor')).commerceSiteChatVisitor.readVisitor(request),
+    },
+    { pluginId: BUNDLE_ID },
+  )
 }
 
 /** Outside orders, with the Admin SDK and the model arriving on the first call. */
@@ -182,4 +219,18 @@ function lazyIndex(name: IndexName): PluginRecordIndex {
     list: async (request) => (await load()).list(request),
     get: async (request) => (await load()).get(request),
   }
+}
+
+/** Stays in site search, with the reads arriving on the first search. */
+const lazyStaysSearch: PluginSiteSearchSource = {
+  key: 'stays',
+  label: 'Stays',
+  items: async (request) =>
+    (await import('./server/stays-site-search')).commerceStaysSiteSearch.items(request),
+}
+
+/** A product's offer, with the read arriving on the first ask. */
+const lazyProductOffer: PluginSiteOfferSource = {
+  resolve: async (request) =>
+    (await import('./server/site-offers')).commerceProductSiteOffer.resolve(request),
 }

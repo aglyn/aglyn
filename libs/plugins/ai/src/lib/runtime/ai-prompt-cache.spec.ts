@@ -338,6 +338,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     caches: true,
     why: 'the console assistant’s five-block prefix, measured in its own spec',
   },
+  'server/site-chat-platform.ts': {
+    step: 'assist.chat',
+    caches: false,
+    why: "the AI chat on a published site (AGL-4250): its static rules and the site's business block, a few hundred tokens each, under the balanced tier's minimum; the page sections, listings and tool results ride volatile, and the plugins' tool schemas follow the owner's settings",
+  },
 }
 
 const SITE_A: AiSiteInventory = {

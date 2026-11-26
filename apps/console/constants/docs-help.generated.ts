@@ -185,6 +185,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/custom-domains/buy-a-domain',
     title: 'Buy a domain',
   },
+  calendar: {
+    path: '/content-and-data/events/calendar',
+    title: 'Calendar, categories and repeating events',
+  },
   catalog: {
     path: '/commerce-and-bookings/commerce/catalog',
     title: 'Product catalog',
@@ -296,6 +300,10 @@ export const DOCS_HELP_TOPICS = {
   crmByAi: {
     path: '/ai/crm-by-ai',
     title: 'The AI CRM built into Aglyn',
+  },
+  currencies: {
+    path: '/commerce-and-bookings/commerce/currencies',
+    title: 'Sell in other currencies',
   },
   customDomains: {
     path: '/building-sites/custom-domains/overview',
@@ -829,6 +837,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/site-backup-and-packages',
     title: 'Site backup and packages',
   },
+  siteChat: {
+    path: '/ai/site-chat',
+    title: 'AI chat on your site',
+  },
   siteLooks: {
     path: '/ai/site-looks',
     title: 'Looks and themes for AI sites',
@@ -1005,7 +1017,7 @@ export const DOCS_HELP_ANCHORS = {
   account: ['#google-sign-in', '#sign-in-methods', '#signing-in-with-any-of-your-addresses', '#verifying-your-email', '#resetting-your-password', '#one-session-across-workspaces', '#automatic-sign-out-after-inactivity', '#when-the-console-asks-you-to-sign-in-again', '#recent-sign-ins', '#when-we-do-not-email-you', '#signing-a-device-out', '#passkeys', '#removing-one', '#blocked--possible-credential-copy', '#downloading-your-data', '#downloading-a-whole-workspace', '#privacy-requests', '#exporting-contacts-and-leads', '#erasing-a-person', '#product-updates', '#closing-your-account'],
   acquisition: ['#what-the-card-shows', '#cross-check', '#channels', '#when-the-card-says-source-unknown', '#what-is-never-recorded', '#related'],
   actionsBuilder: ['#create-an-action', '#recipes', '#describe-it', '#triggers', '#pick-element', '#crm-events', '#funnel-events', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#crm-steps', '#step-conditions', '#sequences', '#transactional-replies', '#merge-tags', '#run-history', '#what-is-and-isnt-recorded', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
-  activities: ['#four-kinds-of-history', '#reading-the-timeline', '#campaign-email', '#logging-an-activity', '#who-what-and-which-company', '#meeting-from-a-booking', '#click-to-call', '#sending-an-email', '#delivery-states', '#captured-email', '#where-an-activity-is-visible', '#the-recent-activity-feed', '#related'],
+  activities: ['#four-kinds-of-history', '#reading-the-timeline', '#campaign-email', '#logging-an-activity', '#call-recordings', '#who-what-and-which-company', '#meeting-from-a-booking', '#click-to-call', '#sending-an-email', '#delivery-states', '#captured-email', '#where-an-activity-is-visible', '#the-recent-activity-feed', '#related'],
   addALocale: ['#steps', '#tips', '#related'],
   addOns: ['#what-you-can-add', '#assigning-register-seats', '#assigning-collaborator-seats', '#aglyn-ai', '#aglyn-ai-questions', '#site-care', '#site-care-statement', '#site-care-projects', '#how-changes-bill', '#plan-switches-and-cancellation', '#related'],
   addSearch: ['#steps', '#tips', '#related'],
@@ -1039,7 +1051,8 @@ export const DOCS_HELP_ANCHORS = {
   bulkActions: ['#exports', '#contacts', '#the-contacts-file', '#companies', '#deals', '#tasks', '#leads', '#at-the-organization-level', '#when-a-row-cannot-be-changed', '#adding-people-to-an-audience', '#related'],
   businessProfile: ['#where-to-edit-it', '#the-business-profile-card', '#where-the-values-come-from', '#workspace-defaults', '#contact-details-are-never-invented', '#what-aglyn-ai-learned', '#which-jobs-read-it', '#related'],
   buyADomain: ['#steps', '#site-has-a-domain', '#confirm-email', '#renewals', '#problems', '#transfer', '#after'],
-  catalog: ['#products-options-and-variants', '#more-than-100-combinations', '#add-ons', '#price-by-size', '#add-ons-on-the-product-page', '#picture-cards', '#free-mockup', '#write-ins', '#name-the-group-on-the-order', '#a-product-built-from-choices', '#sell-in-person-only', '#offer-on-the-kiosk', '#billing-modes-and-subscriptions', '#subscriptions-list', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#show-reviews', '#review-settings', '#review-moderation', '#slugs', '#merchant-center-feed', '#related'],
+  calendar: ['#categories', '#repeating-events', '#calendar-element', '#event-details-page', '#tickets', '#add-to-calendar', '#site-search', '#import-and-export', '#aglyn-ai'],
+  catalog: ['#products-options-and-variants', '#product-list', '#more-than-100-combinations', '#add-ons', '#price-by-size', '#add-ons-on-the-product-page', '#picture-cards', '#free-mockup', '#write-ins', '#name-the-group-on-the-order', '#a-product-built-from-choices', '#sell-in-person-only', '#offer-on-the-kiosk', '#billing-modes-and-subscriptions', '#subscriptions-list', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#show-reviews', '#review-settings', '#review-moderation', '#slugs', '#merchant-center-feed', '#related'],
   claude: ['#connect-claude', '#other-assistants', '#what-claude-can-do', '#changes-show-on-your-live-site', '#what-it-cannot-do', '#good-habits', '#disconnect-claude', '#claude-code', '#for-developers'],
   comingSoonLaunch: ['#1-build-the-coming-soon-page', '#the-notify-me-form', '#2-make-it-the-home-page', '#3-keep-everything-else-out-of-search', '#while-nothing-is-ready-the-site-wide-switch', '#once-youre-launching-page-by-page-per-screen-visibility', '#4-collect-the-signups', '#5-launch-day-reverse-every-step', '#6-verify-it-actually-worked', '#related'],
   commerce: ['#who-charges-what', '#products-hub', '#inventory', '#inventory-locations', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#payment-methods', '#shipping--taxes', '#tax-settings', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#pickup-and-local-delivery', '#dropshipping', '#store-settings', '#discounts-and-coupons', '#discounts', '#coupons', '#commerce-glance', '#commerce-analytics', '#related'],
@@ -1067,6 +1080,7 @@ export const DOCS_HELP_ANCHORS = {
   createWithAi: ['#the-button', '#where-it-appears', '#what-you-get', '#without-the-add-on', '#when-it-is-not-there', '#related'],
   crm: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-and-export', '#segments', '#everywhere-the-crm-shows-up', '#capture-replies', '#at-the-organization-level', '#known-by', '#who-can-open-the-crm', '#one-sender-one-crm', '#related'],
   crmByAi: ['#summarize-a-record', '#summaries-are-reused-until-the-record-changes', '#draft-an-email', '#match-columns', '#what-is-sent', '#set-up-the-crm', '#who-can-use-it', '#related'],
+  currencies: ['#turn-on-other-currencies', '#how-shoppers-get-their-currency', '#exchange-rates', '#rounding', '#price-adjustment', '#fixed-prices', '#prices-that-include-tax', '#charging-and-payouts', '#what-stays-in-your-store-currency', '#ship-to-other-countries', '#related'],
   customDomains: ['#connect-a-domain', '#related'],
   customFields: ['#define-a-field', '#fields-per-record', '#where-values-show', '#currency-fields', '#save-a-form-field', '#picklist-values', '#task-picklists', '#over-the-api', '#retire-restore-delete', '#export-fields', '#recompute-next-activity', '#related'],
   customRoles: ['#create-a-custom-role', '#point-of-sale-permissions', '#site-access-narrows', '#workspace-permissions', '#dataset-permissions', '#site-permissions', '#order-permissions', '#reservation-permissions', '#booking-permissions', '#funnel-and-campaign-permissions', '#marketplace-site-permissions', '#marketplace-publisher-permissions', '#crm-settings-permission', '#crm-colleague-templates-permission', '#crm-move-stages-permission', '#automation-and-domain-permissions', '#integration-permissions', '#email-and-inbox-permissions', '#api-keys-privacy-and-holds', '#ai-permissions', '#effective-permissions', '#per-member-overrides', '#tips', '#related'],
@@ -1198,6 +1212,7 @@ export const DOCS_HELP_ANCHORS = {
   shipWithYourOwnEasyshipSendcloudOrShipperhq: ['#before-you-start', '#connect-an-account', '#easyship', '#sendcloud', '#shipperhq', '#tracking-webhooks', '#what-changes', '#disconnect', '#troubleshooting', '#related'],
   showToSignedInVisitors: ['#choose-who-sees-an-element', '#what-visitors-see'],
   siteBackupAndPackages: ['#backup-and-restore-card', '#what-a-package-carries', '#download-a-backup', '#export-items', '#import-a-package', '#1-upload', '#2-items', '#3-missing-items', '#4-changes', '#5-review', '#6-import', '#undo-an-import', '#moving-a-site-to-another-of-your-sites'],
+  siteChat: ['#set-up-the-chat', '#what-the-chat-may-do', '#pages', '#conversations', '#credits-and-limits', '#how-the-chat-loads', '#privacy', '#related'],
   siteLooks: ['#choose-a-style', '#each-styles-layout', '#an-ai-starters-look', '#how-the-look-is-made', '#your-theme-afterwards', '#change-the-look-later', '#related'],
   siteProtection: ['#where-these-controls-live', '#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
   siteSearch: ['#how-it-works', '#what-it-searches', '#the-layout-built-in-pages-use', '#configure-it', '#related'],

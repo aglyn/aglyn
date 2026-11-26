@@ -53,6 +53,7 @@ import { aiComponentSelectionTool } from '../server/ai-generate-component'
 import { aiMediaSvgTool } from '../server/ai-media-svg'
 import { assistEditTool } from '../server/assist-edit'
 import { assistBuildTool } from '../server/assist-build'
+import { siteChatHandOffTool } from '../server/site-chat-prompt'
 import { aiComponentTool } from '../tools/ai-component-tool'
 import { AI_CRM_EMAIL_TOOL, AI_CRM_MAPPING_TOOL, aiCrmRecordTool } from '../tools/ai-crm-tool'
 import { aiExperimentExplainTool, aiExperimentVariantsTool } from '../tools/ai-experiment-tool'
@@ -226,6 +227,12 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
   // its answer is prose the caller parses, held to the caller's own rules.
   'server/plugin-text-generation.ts': { generate: () => [] },
   'server/ai-assist.ts': { element: () => [], blog: () => [], section: () => [assistSectionTool()] },
+  // The site chat (AGL-4250): its own hand-off tool, beside whichever tools
+  // the site's plugins register on core.site-chat-tools (each plugin's spec
+  // holds its own schemas).
+  'server/site-chat-platform.ts': {
+    'hand-off': () => [siteChatHandOffTool],
+  },
   'server/assist-chat.ts': {
     chat: () => [],
     ...Object.fromEntries(ASSIST_EDIT_DOCUMENT_KINDS.map((kind) => [`${kind} edit`, () => [assistEditTool(kind)]])),

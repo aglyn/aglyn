@@ -26,7 +26,7 @@ import searchContent, {
   filterSearchResults,
   SEARCH_FACET_ALL,
   searchResultFacets,
-} from '../../../../utils/search-content'
+} from '@aglyn/tenant-runtime/site-search'
 import { hostSeoTitleParts } from '../../../../utils/not-found-title'
 import getOrgBilling from '../../../../utils/get-org-billing'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'

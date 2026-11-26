@@ -72,6 +72,7 @@ import {
 } from '../../../../utils/media-upload-limits'
 import {
   AUDIO_RIGHTS_FIELD,
+  MEDIA_UPLOAD_PURPOSE_FIELD,
   audioRightsRefusal,
   audioRightsVerdict,
 } from '../../../../utils/media-audio-rights'
@@ -178,6 +179,8 @@ async function handler(request: Request): Promise<Response> {
         const rights = audioRightsVerdict({
           contentType,
           confirmed: body?.[AUDIO_RIGHTS_FIELD],
+          purpose: body?.[MEDIA_UPLOAD_PURPOSE_FIELD],
+          isPrivate: body?.['private'],
           uid: decoded.uid,
         })
         if (rights.refusal) return audioRightsRefusal(rights.refusal)
@@ -313,6 +316,8 @@ async function handler(request: Request): Promise<Response> {
     const rights = audioRightsVerdict({
       contentType,
       confirmed: body?.[AUDIO_RIGHTS_FIELD],
+      purpose: body?.[MEDIA_UPLOAD_PURPOSE_FIELD],
+      isPrivate: body?.['private'],
       uid: decoded.uid,
     })
     if (rights.refusal) {
@@ -645,7 +650,13 @@ async function handler(request: Request): Promise<Response> {
     // raw storage URLs, so WebP it can never reference would be bytes nobody
     // reads — but dimensions and the uploader are not CDN features and land
     // regardless.
-    const cdnAllowed = checkEntitlement(org as never, 'mediaCdn')
+    // A private asset (AGL-1051) gets no `cdnPath`, no variants and no
+    // download token, exactly as on the direct route: its bytes are reached
+    // only through a signed link minted per view. A call recording filed on
+    // a CRM activity is uploaded this way, and is usually past the direct
+    // route's ~3 MB.
+    const isPrivateUpload = body?.['private'] === true
+    const cdnAllowed = checkEntitlement(org as never, 'mediaCdn') && !isPrivateUpload
     // Variants remain an optimization and still never fail the upload
     // (AGL-1468) — and a failure is still WRITTEN DOWN, on the document and on
     // the counter, because three weeks of silent breakage cost 174 assets.
@@ -721,19 +732,25 @@ async function handler(request: Request): Promise<Response> {
       ...(contentSha256 ? { contentSha256 } : {}),
     })
 
-    const token = randomUUID()
-    await file.setMetadata({
-      metadata: { firebaseStorageDownloadTokens: token },
-    })
-    const url =
-      `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
-      `${encodeURIComponent(objectPath)}` +
-      `?alt=media&token=${token}`
+    // No token on a private object: a raw download URL is the one thing a
+    // private asset must never have, so none is minted (set-private deletes
+    // the field for the same reason).
+    let url: string | null = null
+    if (!isPrivateUpload) {
+      const token = randomUUID()
+      await file.setMetadata({
+        metadata: { firebaseStorageDownloadTokens: token },
+      })
+      url =
+        `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
+        `${encodeURIComponent(objectPath)}` +
+        `?alt=media&token=${token}`
+    }
     await scope.scopeRef.collection('media').doc(mediaId).set({
       fileName,
       contentType,
       sizeBytes: actualBytes,
-      url,
+      ...(url ? { url } : {}),
       storagePath: objectPath,
       folderId,
       // What the library filters and searches by (AGL-3327), as the direct
@@ -810,8 +827,9 @@ async function handler(request: Request): Promise<Response> {
         billing: org,
         cdnScope: scope.cdnScope,
         mediaId,
-        isPrivate: false,
+        isPrivate: isPrivateUpload,
       }),
+      ...(isPrivateUpload ? { private: true } : {}),
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
     await counterRef.set(

@@ -92,6 +92,21 @@ fun rememberOrdersRegisters(context: NativePluginContext): List<PosRegister> {
   return (live as? Live.Ready)?.value?.map(::posRegisterFrom)?.let(::sortRegisters).orEmpty()
 }
 
+/**
+ * The store's own currency as its store settings name it (`settings/store.currency`, upper case, USD until read):
+ * the one an order from before multi-currency is in (AGL-4248).
+ */
+@Composable
+fun rememberOrderStoreCurrency(context: NativePluginContext): String {
+  var currency by remember(context.hostId) { mutableStateOf("USD") }
+  androidx.compose.runtime.LaunchedEffect(context.hostId) {
+    val hostId = context.hostId ?: return@LaunchedEffect
+    (runCatching { context.firestore.get("hosts/$hostId/settings/store") }.getOrNull()?.data?.get("currency") as? String)
+      ?.ifEmpty { null }?.let { currency = it.uppercase() }
+  }
+  return currency
+}
+
 /** The store's currency, as its site document names it (the register reads it the same way). */
 @Composable
 fun rememberStoreCurrency(context: NativePluginContext): String {
