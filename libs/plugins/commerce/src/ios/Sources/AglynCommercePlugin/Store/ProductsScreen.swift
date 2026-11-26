@@ -336,7 +336,13 @@ struct ProductDetailView: View {
       if !row.item.modifierGroups.isEmpty {
         Section("Options") {
           ForEach(row.item.modifierGroups, id: \.id) { group in
-            LabeledContent(group.name, value: group.options.map(\.name).joined(separator: ", "))
+            // A write-in (write-ins) is a field, not a list of choices.
+            LabeledContent(
+              group.name,
+              value: group.isWriteIn
+                ? (["Write-in, up to \(group.writeInLimit) characters"] + (group.digitsOnly == true ? ["numbers only"] : []))
+                  .joined(separator: ", ")
+                : group.options.map(\.name).joined(separator: ", "))
           }
         }
       }

@@ -26,8 +26,11 @@ import MenuItem from '@mui/material/MenuItem'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import {
+  modifierGroupIsWriteIn,
   modifierGroupRequired,
   modifierOptionPriceCents,
+  writeInMaxLength,
+  writeInProblem,
   type ModifierSelection,
   type ProductModifierGroup,
   type ProductModifierOption,
@@ -60,6 +63,70 @@ export function withGroupAnswer(
   )
 }
 
+/**
+ * The picks with a write-in's answer replaced (write-ins): the
+ * text as typed so far, kept while it is being typed; an empty answer leaves
+ * the group unanswered. The server cleans and checks it.
+ */
+export function withWriteInAnswer(
+  groups: readonly ProductModifierGroup[],
+  value: readonly ModifierSelection[],
+  group: ProductModifierGroup,
+  text: string,
+): ModifierSelection[] {
+  const option = group.options[0]
+  const others = value.filter((pick) => pick.groupId !== group.id)
+  const answer = option && text.trim() ? [{ groupId: group.id, optionId: option.id, text }] : []
+  const order = new Map(groups.map((entry, index) => [entry.id, index]))
+  return [...others, ...answer].sort((x, y) => (order.get(x.groupId) ?? 0) - (order.get(y.groupId) ?? 0))
+}
+
+export interface ProductWriteInFieldProps {
+  group: ProductModifierGroup
+  groups: readonly ProductModifierGroup[]
+  variantId?: string
+  value: readonly ModifierSelection[]
+  onChange: (next: ModifierSelection[]) => void
+  formatCents: (cents: number) => string
+  disabled?: boolean
+}
+
+/**
+ * One write-in on a product's page: a text field named after the group, with
+ * the merchant's note, what a filled answer adds and a count of characters
+ * under it, or what is wrong with what was typed.
+ */
+export function ProductWriteInField(props: ProductWriteInFieldProps) {
+  const { group, groups, variantId, value, onChange, formatCents, disabled } = props
+  const option = group.options[0]
+  const text = value.find((pick) => pick.groupId === group.id)?.text ?? ''
+  const limit = writeInMaxLength(group)
+  const problem = writeInProblem(group, text)
+  const cents = option ? modifierOptionPriceCents(option, variantId) : 0
+  const hint = [option?.note, cents > 0 ? `Adds ${formatCents(cents)}` : null, `${Array.from(text).length}/${limit}`]
+    .filter(Boolean)
+    .join(' · ')
+  return (
+    <TextField
+      size="small"
+      fullWidth
+      required={modifierGroupRequired(group)}
+      disabled={disabled}
+      label={group.name}
+      value={text}
+      error={Boolean(problem)}
+      onChange={(event) => onChange(withWriteInAnswer(groups, value, group, event.target.value))}
+      helperText={problem ?? hint}
+      slotProps={{
+        htmlInput: {
+          maxLength: limit,
+          ...(group.digitsOnly ? { inputMode: 'numeric', pattern: '[0-9]*' } : {}),
+        },
+      }}
+    />
+  )
+}
+
 /** What a group asks for, said under it. */
 export function addOnGroupHint(group: Pick<ProductModifierGroup, 'min' | 'max'>): string {
   if (group.max === 1) return group.min > 0 ? 'Choose one' : 'Optional'
@@ -84,6 +151,20 @@ export function ProductAddOns(props: ProductAddOnsProps) {
   return (
     <Stack spacing={1.5} sx={{ mb: 1.5 }}>
       {groups.map((group) => {
+        if (modifierGroupIsWriteIn(group)) {
+          return (
+            <ProductWriteInField
+              key={group.id}
+              group={group}
+              groups={groups}
+              variantId={variantId}
+              value={value}
+              onChange={onChange}
+              formatCents={formatCents}
+              disabled={disabled}
+            />
+          )
+        }
         const chosen = value
           .filter((pick) => pick.groupId === group.id)
           .map((pick) => pick.optionId)

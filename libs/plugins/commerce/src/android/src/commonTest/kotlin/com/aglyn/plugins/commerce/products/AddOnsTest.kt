@@ -134,4 +134,57 @@ class AddOnsTest {
     assertNull(after["includes"])
     assertNull(after["note"])
   }
+
+  @Test
+  fun aNewWriteInIsOneRequiredFieldShownOnTheWebsite() {
+    var n = 0
+    val group = newWriteInGroup { prefix -> "$prefix${++n}" }
+    assertTrue(group.isWriteIn)
+    assertEquals(1, group.min)
+    assertEquals(1, group.max)
+    assertEquals(20, group.maxLength)
+    assertEquals(true, group.online)
+    assertEquals(listOf("o2"), group.choices.map { it.id })
+    val named = group.withWriteInName("Name on jersey")
+    assertEquals("Name on jersey", named.choices.single().name)
+    assertNull(checkAddOns(listOf(named)))
+    assertEquals("“Name on jersey” takes 1 to 40 characters", checkAddOns(listOf(named.copy(maxLength = 41))))
+    assertEquals(40, writeInLengthOf("99"))
+    assertEquals(1, writeInLengthOf(""))
+    assertEquals(14, writeInLengthOf("14"))
+  }
+
+  @Test
+  fun aWriteInAndANamedGroupSaveAndReadBackWithEveryField() {
+    val size = AddOnGroupDraft("jersey", "Jersey size", min = 1, max = 1, online = true, nameOnOrder = true, choices = listOf(AddOnChoiceDraft("jersey-m", "M")))
+    val number = newWriteInGroup { prefix -> prefix + "n" }.withWriteInName("Number").copy(maxLength = 3, digitsOnly = true)
+      .let { it.copy(choices = listOf(it.choices[0].copy(price = "5", note = "On the back"))) }
+    val draft = productDraftOf("p1", stored).copy(addOns = listOf(size, number))
+    val saved = productSaveJson(draft, stored)["modifierGroups"]!!.jsonArray.map { it.jsonObject }
+    assertEquals(true, saved[0]["nameOnOrder"]!!.jsonPrimitive.content.toBoolean())
+    assertNull(saved[0]["kind"])
+    val field = saved[1]
+    assertEquals("text", field["kind"]!!.jsonPrimitive.content)
+    assertEquals(3L, field["maxLength"]!!.jsonPrimitive.content.toLong())
+    assertEquals(true, field["digitsOnly"]!!.jsonPrimitive.content.toBoolean())
+    val option = field["options"]!!.jsonArray.single().jsonObject
+    assertEquals("Number", option["name"]!!.jsonPrimitive.content)
+    assertEquals(500L, option["priceCents"]!!.jsonPrimitive.content.toLong())
+    assertEquals("On the back", option["note"]!!.jsonPrimitive.content)
+    val back = addOnDrafts(
+      mapOf(
+        "modifierGroups" to listOf(
+          mapOf("id" to "number", "name" to "Number", "kind" to "text", "min" to 1, "max" to 1, "maxLength" to 3, "digitsOnly" to true, "options" to listOf(mapOf("id" to "o", "name" to "Number", "priceCents" to 500))),
+          mapOf("id" to "jersey", "name" to "Jersey size", "min" to 1, "max" to 1, "nameOnOrder" to true, "options" to listOf(mapOf("id" to "m", "name" to "M", "priceCents" to 0))),
+        ),
+      ),
+    )
+    assertTrue(back[0].isWriteIn)
+    assertEquals(3, back[0].maxLength)
+    assertEquals(true, back[0].digitsOnly)
+    assertEquals("5.00", back[0].choices[0].price)
+    assertEquals(true, back[1].nameOnOrder)
+    val turnedOff = productSaveJson(draft.copy(addOns = listOf(size.copy(nameOnOrder = null))), stored)["modifierGroups"]!!.jsonArray[0].jsonObject
+    assertNull(turnedOff["nameOnOrder"])
+  }
 }

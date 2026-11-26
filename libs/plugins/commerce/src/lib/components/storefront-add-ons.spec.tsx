@@ -206,3 +206,90 @@ describe('a product page with add-ons', () => {
     expect(button('Add to cart').disabled).toBe(false)
   })
 })
+
+describe('a gear set page: sizes plus a name and number typed in', () => {
+  const SET = {
+    id: 'set',
+    name: 'Summit Race Set',
+    slug: 'summit-race-set',
+    type: 'physical',
+    mediaUrls: [],
+    options: [],
+    variants: [{ id: 'default', priceUsd: 250, soldOut: false }],
+    modifierGroups: [
+      {
+        id: 'jersey',
+        name: 'Jersey size',
+        min: 1,
+        max: 1,
+        nameOnOrder: true,
+        options: [
+          { id: 'm', name: 'M', priceCents: 0 },
+          { id: 'l', name: 'L', priceCents: 0 },
+        ],
+      },
+      {
+        id: 'name',
+        name: 'Name on jersey',
+        kind: 'text',
+        min: 1,
+        max: 1,
+        maxLength: 14,
+        options: [{ id: 'name-o', name: 'Name on jersey', priceCents: 0, note: 'As it should print on the back' }],
+      },
+      {
+        id: 'number',
+        name: 'Number',
+        kind: 'text',
+        min: 1,
+        max: 1,
+        maxLength: 3,
+        digitsOnly: true,
+        options: [{ id: 'number-o', name: 'Number', priceCents: 500 }],
+      },
+    ],
+  }
+  beforeEach(() => {
+    mockSite.pageData = { commerce: { product: SET } }
+  })
+
+  it('asks for the name and number in text fields, says what is missing, and adds the number’s price', async () => {
+    render(<ProductDetail />)
+    const name = (await screen.findByRole('textbox', { name: /Name on jersey/ })) as HTMLInputElement
+    const number = screen.getByRole('textbox', { name: /Number/ }) as HTMLInputElement
+    expect(name.maxLength).toBe(14)
+    expect(number.getAttribute('inputmode')).toBe('numeric')
+    expect(screen.getByText('As it should print on the back · 0/14')).toBeTruthy()
+    expect(screen.getByText('Adds $5.00 · 0/3')).toBeTruthy()
+
+    await choose(/Jersey size/, 'L')
+    expect(button('Add to cart').disabled).toBe(true)
+    expect(screen.getByText('Fill in name on jersey for Summit Race Set.')).toBeTruthy()
+
+    fireEvent.change(name, { target: { value: 'SMITH' } })
+    fireEvent.change(number, { target: { value: '2a' } })
+    expect(screen.getAllByText('Number takes numbers only.').length).toBeGreaterThan(0)
+    expect(button('Add to cart').disabled).toBe(true)
+
+    fireEvent.change(number, { target: { value: '27' } })
+    expect(button('Add to cart').disabled).toBe(false)
+    expect(screen.getByText('Total: $255.00')).toBeTruthy()
+  })
+
+  it('sends the answers with the line, for the server to check', async () => {
+    render(<ProductDetail />)
+    await choose(/Jersey size/, 'M')
+    fireEvent.change(await screen.findByRole('textbox', { name: /Name on jersey/ }), { target: { value: 'SMITH' } })
+    fireEvent.change(screen.getByRole('textbox', { name: /Number/ }), { target: { value: '27' } })
+    await act(async () => {
+      fireEvent.click(button('Add to cart'))
+    })
+    await waitFor(() => expect(fetchMock.mock.calls.some((call) => call[0] === '/api/commerce/cart')).toBe(true))
+    const cartCall = fetchMock.mock.calls.find((call) => call[0] === '/api/commerce/cart')
+    expect(JSON.parse(cartCall?.[1]?.body).modifiers).toEqual([
+      { groupId: 'jersey', optionId: 'm' },
+      { groupId: 'name', optionId: 'name-o', text: 'SMITH' },
+      { groupId: 'number', optionId: 'number-o', text: '27' },
+    ])
+  })
+})

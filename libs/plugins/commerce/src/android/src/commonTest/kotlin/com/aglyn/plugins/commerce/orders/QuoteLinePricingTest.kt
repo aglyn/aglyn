@@ -69,4 +69,19 @@ class QuoteLinePricingTest {
     assertEquals("Back wall (+$150.00)", quoteModifierOptionLabel(walls.options[0], "small"))
     assertEquals("Side wall", quoteModifierOptionLabel(walls.options[1], "small"))
   }
+
+  @Test
+  fun aWriteInPricesWhenFilledAndKeepsItsAnswerOnTheLine() {
+    val number = ProductModifierGroup(
+      id = "number", name = "Number", kind = "text", min = 1.0, max = 1.0, maxLength = 3.0, digitsOnly = true,
+      options = listOf(ProductModifierOption(id = "number-o", name = "Number", priceCents = 500.0)),
+    )
+    val jersey = HostProduct(name = "Jersey", variants = listOf(ProductVariant(id = "default", priceUsd = 80.0)), modifierGroups = listOf(number))
+    fun request(text: String?) = QuoteLineRequest.Catalog(productId = "jersey", variantId = null, quantity = 1.0, modifiers = listOf(ModifierSelection("number", "number-o", text)))
+    val priced = assertIs<PricedQuoteLine.Ok>(priceQuoteCatalogLine(jersey, request("27"))).line
+    assertEquals(8_500.0, priced.unitAmountCents)
+    assertEquals("Number: 27", priced.variantLabel)
+    assertEquals("27", priced.modifiers?.single()?.text)
+    assertEquals(PricedQuoteLine.Refused("Fill in number for Jersey."), priceQuoteCatalogLine(jersey, request(null)))
+  }
 }

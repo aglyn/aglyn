@@ -22,6 +22,7 @@ import {
   type QuoteEmailThread,
   type QuoteResponseFile,
 } from './commerce-quotes'
+import { cleanWriteIn } from './product-modifiers'
 
 /*==========================================
  * A QUOTE STARTED FROM A REQUEST (AGL-4098).
@@ -68,7 +69,7 @@ export interface ProductFieldValue {
   productId: string
   variantId?: string
   options?: Record<string, string>
-  modifiers?: Array<{ groupId: string; optionId: string }>
+  modifiers?: Array<{ groupId: string; optionId: string; text?: string }>
   /** How many the shopper asked about, 1 to {@link PRODUCT_FIELD_MAX_QUANTITY}. Absent: one. */
   quantity?: number
 }
@@ -131,7 +132,8 @@ export function parseProductFieldValue(raw: unknown): ProductFieldValue | null {
         .slice(0, MAX_MODIFIERS)
         .map((entry) => {
           const pick = (entry ?? {}) as Record<string, unknown>
-          return { groupId: text(pick['groupId']), optionId: text(pick['optionId']) }
+          const answer = cleanWriteIn(pick['text'])
+          return { groupId: text(pick['groupId']), optionId: text(pick['optionId']), ...(answer ? { text: answer } : {}) }
         })
         .filter((pick) => pick.groupId && pick.optionId)
     : []

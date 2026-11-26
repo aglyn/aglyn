@@ -90,7 +90,8 @@ private fun clampQuantity(quantity: Int) = quantity.coerceIn(0, POS_LINE_MAX_QUA
 
 /** Adds [quantity] of a pick: the same item with the same choices grows its line. */
 fun Cart.add(pick: CartPick, quantity: Int = 1): Cart {
-  val modifiers = pick.modifiers.map { ModifierSelection(it.groupId, it.optionId) }
+  // A write-in's answer stays on its pick (write-ins): two answers are two lines.
+  val modifiers = pick.modifiers.map { ModifierSelection(it.groupId, it.optionId, cleanWriteIn(it.text).ifEmpty { null }) }
   val key = cartLineKey(pick.productId, pick.variantId, modifiers)
   lines.firstOrNull { it.key == key }?.let { return setQuantity(key, it.quantity + quantity) }
   if (lines.size >= POS_CART_MAX_LINES) return this
@@ -139,7 +140,15 @@ fun Cart.saleLines(): JsonArray = buildJsonArray {
           put(
             "modifiers",
             buildJsonArray {
-              for (modifier in line.modifiers) add(buildJsonObject { put("groupId", modifier.groupId); put("optionId", modifier.optionId) })
+              for (modifier in line.modifiers) {
+                add(
+                  buildJsonObject {
+                    put("groupId", modifier.groupId)
+                    put("optionId", modifier.optionId)
+                    modifier.text?.takeIf { it.isNotEmpty() }?.let { put("text", it) }
+                  },
+                )
+              }
             },
           )
         }
@@ -172,7 +181,7 @@ fun readStoredCart(raw: String?): Cart {
       val modifier = item as? JsonObject ?: return@mapNotNull null
       val groupId = modifier["groupId"].text() ?: return@mapNotNull null
       val optionId = modifier["optionId"].text() ?: return@mapNotNull null
-      ModifierSelection(groupId, optionId)
+      ModifierSelection(groupId, optionId, modifier["text"].text())
     }
     cart = cart.add(
       CartPick(

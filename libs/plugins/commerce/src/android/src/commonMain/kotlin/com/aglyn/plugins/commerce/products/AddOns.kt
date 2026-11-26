@@ -6,6 +6,9 @@ import com.aglyn.contracts.ProductModifierOption
 import com.aglyn.plugins.commerce.pos.POS_MAX_MODIFIER_GROUPS
 import com.aglyn.plugins.commerce.pos.POS_MAX_MODIFIER_OPTIONS
 import com.aglyn.plugins.commerce.orders.parseMoneyCents
+import com.aglyn.plugins.commerce.pos.DEFAULT_WRITE_IN_LENGTH
+import com.aglyn.plugins.commerce.pos.MAX_WRITE_IN_LENGTH
+import com.aglyn.plugins.commerce.pos.WRITE_IN_KIND
 import com.aglyn.plugins.commerce.pos.modifierGroupsProblem
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -20,7 +23,9 @@ import kotlin.uuid.Uuid
  * the item and need no stock of their own, each free or adding to the price,
  * and costing more on a larger size where the product has sizes. A group is
  * offered at the register always, and on the product's page on the website
- * when "Show on the website" is on, which a new group starts with.
+ * when "Show on the website" is on, which a new group starts with. A
+ * write-in (write-ins) asks the customer to type an answer, such
+ * as a name to print, an engraving or a cake message: one choice names and prices it.
  *
  * A draft keeps prices as typed. On save each group and choice is written over
  * its stored record, so what the apps do not edit (a choice's picture, its
@@ -58,9 +63,20 @@ data class AddOnGroupDraft(
   val max: Int = 1,
   val online: Boolean? = null,
   val choices: List<AddOnChoiceDraft> = emptyList(),
+  /** `"text"` makes the group a write-in (write-ins): one field the customer types into. */
+  val kind: String? = null,
+  /** A write-in's longest answer, 1 to 40 characters. */
+  val maxLength: Int? = null,
+  /** A write-in that takes numbers only, such as a number. */
+  val digitsOnly: Boolean? = null,
+  /** Print the group's name before the choice on the order ("Size: M"). */
+  val nameOnOrder: Boolean? = null,
 ) {
   /** Whether a pick is required before the item can be added. */
   val required: Boolean get() = min > 0
+
+  /** Whether the group is a write-in the customer types. */
+  val isWriteIn: Boolean get() = kind == WRITE_IN_KIND
 }
 
 @OptIn(ExperimentalUuidApi::class)
@@ -69,6 +85,22 @@ private fun newAddOnId(prefix: String): String = prefix + Uuid.random().toHexStr
 /** A new group, as the console makes one: optional, pick one, shown on the website, with one empty choice. */
 fun newAddOnGroup(mintId: (String) -> String = ::newAddOnId): AddOnGroupDraft =
   AddOnGroupDraft(id = mintId("g"), online = true, choices = listOf(AddOnChoiceDraft(id = mintId("o"))))
+
+/**
+ * A new write-in (write-ins), as the console's `newWriteInGroup`: one field the customer types into, such as
+ * a name to print or an engraving. Required, shown on the website, free until the merchant sets what it adds.
+ */
+fun newWriteInGroup(mintId: (String) -> String = ::newAddOnId): AddOnGroupDraft = AddOnGroupDraft(
+  id = mintId("g"), kind = WRITE_IN_KIND, min = 1, max = 1, maxLength = DEFAULT_WRITE_IN_LENGTH, online = true,
+  choices = listOf(AddOnChoiceDraft(id = mintId("o"))),
+)
+
+/** A write-in renamed (`withWriteInName`): its one choice carries the same name, so every reader that names a pick by its choice names the field. */
+fun AddOnGroupDraft.withWriteInName(name: String): AddOnGroupDraft =
+  copy(name = name, choices = choices.mapIndexed { at, choice -> if (at == 0) choice.copy(name = name) else choice })
+
+/** A typed "Longest answer", as the console keeps it: a whole number from 1 to 40; anything unreadable is 1. */
+fun writeInLengthOf(text: String): Int = (text.filter(Char::isDigit).toIntOrNull() ?: 1).coerceIn(1, MAX_WRITE_IN_LENGTH)
 
 fun newAddOnChoice(mintId: (String) -> String = ::newAddOnId): AddOnChoiceDraft = AddOnChoiceDraft(id = mintId("o"))
 
@@ -92,6 +124,10 @@ fun addOnDrafts(data: Map<String, Any?>): List<AddOnGroupDraft> =
       min = (group["min"] as? Number)?.toInt() ?: 0,
       max = (group["max"] as? Number)?.toInt() ?: 1,
       online = group["online"] as? Boolean,
+      kind = group["kind"] as? String,
+      maxLength = (group["maxLength"] as? Number)?.toInt(),
+      digitsOnly = group["digitsOnly"] as? Boolean,
+      nameOnOrder = group["nameOnOrder"] as? Boolean,
       choices = (group["options"] as? List<*>).orEmpty().mapNotNull { raw ->
         val option = raw as? Map<*, *> ?: return@mapNotNull null
         AddOnChoiceDraft(
@@ -122,6 +158,10 @@ fun addOnGroups(drafts: List<AddOnGroupDraft>): List<ProductModifierGroup> =
       min = group.min.toDouble(),
       name = group.name,
       online = group.online,
+      kind = group.kind,
+      maxLength = group.maxLength?.toDouble(),
+      digitsOnly = group.digitsOnly,
+      nameOnOrder = group.nameOnOrder,
       options = group.choices.map { choice ->
         val byVariant = choice.byVariant.filterValues { it.isNotBlank() }.mapValues { addOnCents(it.value) ?: -1.0 }
         ProductModifierOption(
@@ -170,6 +210,12 @@ fun addOnsJson(drafts: List<AddOnGroupDraft>, stored: JsonElement?): JsonArray {
       fields["min"] = JsonPrimitive(group.min.toLong())
       fields["max"] = JsonPrimitive(group.max.toLong())
       group.online?.let { fields["online"] = JsonPrimitive(it) }
+      // A write-in (write-ins) and a group named on the order: each kept only when it says something.
+      group.kind?.let { fields["kind"] = JsonPrimitive(it) } ?: fields.remove("kind")
+      val writeIn = group.kind == WRITE_IN_KIND
+      group.maxLength?.takeIf { writeIn }?.let { fields["maxLength"] = JsonPrimitive(it.toLong()) } ?: fields.remove("maxLength")
+      group.digitsOnly?.takeIf { writeIn }?.let { fields["digitsOnly"] = JsonPrimitive(it) } ?: fields.remove("digitsOnly")
+      group.nameOnOrder?.let { fields["nameOnOrder"] = JsonPrimitive(it) } ?: fields.remove("nameOnOrder")
       fields["options"] = JsonArray(
         group.options.map { option ->
           val choice = storedOptions.firstOrNull { idOf(it) == option.id }?.toMutableMap() ?: mutableMapOf()
@@ -205,6 +251,7 @@ fun variantMatrixProblem(options: List<OptionDraft>): String? {
   val count = variantCountOf(options)
   if (count <= COMMERCE_MAX_VARIANTS) return null
   val shown = count.toString().reversed().chunked(3).joinToString(",").reversed()
-  return "These options make $shown combinations, and a product holds at most $COMMERCE_MAX_VARIANTS. Remove some values, or move " +
-    "choices that don’t need their own stock (walls, printing, extras) to Add-ons, priced by option where they cost more on a larger size."
+  return "These options make $shown combinations, and a product holds at most $COMMERCE_MAX_VARIANTS. Keep as options only " +
+    "what you stock separately, and move the rest to Add-ons: they combine without a limit, can be required, and can cost more on " +
+    "some options. A choice the customer types, such as a name to print, is a write-in."
 }

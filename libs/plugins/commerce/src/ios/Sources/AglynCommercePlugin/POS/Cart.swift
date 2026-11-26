@@ -139,7 +139,7 @@ struct Cart: Codable, Hashable {
         if let variant = line.variantID { record["variantId"] = .string(variant) }
         if !line.modifiers.isEmpty {
           record["modifiers"] = .array(
-            line.modifiers.map { .object(["groupId": .string($0.groupId), "optionId": .string($0.optionId)]) })
+            line.modifiers.map(modifierSelectionJSON))
         }
         return .object(record)
       })
@@ -162,7 +162,10 @@ struct Cart: Codable, Hashable {
             if case .object(let modifier) = item, case .string(let group)? = modifier["groupId"],
               case .string(let option)? = modifier["optionId"]
             {
-              modifiers.append(ModifierSelection(groupId: group, optionId: option))
+              // A write-in's answer (write-ins) is kept with its pick, cleaned.
+              var text: String?
+              if case .string(let typed)? = modifier["text"] { text = cleanWriteIn(typed).nilIfEmpty }
+              modifiers.append(ModifierSelection(groupId: group, optionId: option, text: text))
             }
           }
         }
@@ -204,7 +207,7 @@ struct Cart: Codable, Hashable {
           if let variant = line.variantID { record["variantId"] = .string(variant) }
           if let label = line.variantLabel { record["variantLabel"] = .string(label) }
           record["modifiers"] = .array(
-            line.modifiers.map { .object(["groupId": .string($0.groupId), "optionId": .string($0.optionId)]) })
+            line.modifiers.map(modifierSelectionJSON))
           return .object(record)
         }),
       "discountPct": .number(Double(discountPct)),

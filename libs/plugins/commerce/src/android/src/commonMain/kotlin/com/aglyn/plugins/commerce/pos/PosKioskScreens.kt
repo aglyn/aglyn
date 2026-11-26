@@ -377,6 +377,14 @@ private fun KioskItemSheet(model: PosKioskModel, product: PosKioskProduct, close
           }
         }
         for (group in item.modifierGroups) {
+          if (group.isWriteIn()) {
+            // A write-in (write-ins): the customer types the answer.
+            WriteInField(group, item.modifierGroups, variantId, picks, { model.money(it) }, "kiosk-writein-${group.id}") {
+              picks = it
+              problem = null
+            }
+            continue
+          }
           val chosen = picks.filter { it.groupId == group.id }.map { it.optionId }
           Section(group.name + if (group.required()) " · Required" else if (!group.single()) " · Up to ${group.max.toInt()}" else " · Optional") {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
@@ -422,6 +430,8 @@ private fun KioskItemSheet(model: PosKioskModel, product: PosKioskProduct, close
                 }
               }
             },
+            // Off until every required choice and write-in is answered, as the console's kiosk keeps it.
+            enabled = item.variants.firstOrNull { it.id == variantId }?.let { pickOf(item, it, picks) is PickResult.Ok } == true,
             modifier = Modifier.weight(2f).heightIn(min = 56.dp).testTag("kiosk-item-add"),
           ) { Text("Add") }
         }

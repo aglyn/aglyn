@@ -652,6 +652,13 @@ private fun ItemSheetContent(model: RegisterModel, sheet: ItemSheet) {
       }
     }
     for (group in item.modifierGroups) {
+      if (group.isWriteIn()) {
+        // A write-in (write-ins): the cashier types the answer the customer gives.
+        WriteInField(group, item.modifierGroups, variant.id, sheet.picks, { money(it, model.currency) }, "pos-writein-${group.id}") {
+          model.sheet = sheet.copy(picks = it, problem = null)
+        }
+        continue
+      }
       val chosen = sheet.picks.filter { it.groupId == group.id }.map { it.optionId }
       Section(group.name + if (group.required()) " · Required" else if (!group.single()) " · Up to ${group.max.toInt()}" else " · Optional") {
         androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
@@ -686,7 +693,8 @@ private fun ItemSheetContent(model: RegisterModel, sheet: ItemSheet) {
     }
     Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
       OutlinedButton(onClick = { model.sheet = null }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("Cancel") }
-      Button(onClick = { model.addFromSheet() }, modifier = Modifier.weight(2f).heightIn(min = 52.dp).testTag("pos-item-add")) {
+      // Add stays off until every required choice and write-in is answered, as the console's dialog keeps it.
+      Button(onClick = { model.addFromSheet() }, enabled = pick is PickResult.Ok, modifier = Modifier.weight(2f).heightIn(min = 52.dp).testTag("pos-item-add")) {
         Text(if (unit != null) "Add · ${money(unit * sheet.quantity, model.currency)}" else "Add to basket")
       }
     }

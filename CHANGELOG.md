@@ -9,6 +9,33 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.30.0 — 2026-11-26
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.29.3...v1.30.0)
+
+### Added
+
+- **android:** write-in add-ons in the register, kiosk, product editor, orders and quotes
+- **ios:** write-in add-ons in the register, kiosk, product editor, orders and quotes
+- **commerce:** write-ins on the product page, web register, kiosk, quotes and add-ons editor
+- **commerce:** write-in add-ons carry a typed answer on the order line
+
+### Fixed
+
+- **redirects:** a site enforces every redirect rule, not the first 100
+- **commerce:** write-ins and the 100-variant message speak for any product, not one kind
+
+### Documentation
+
+- **commerce:** write-ins, naming a group on the order, and setting up a gear set
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **native:** regenerate contracts and keep write-in answers when a quote line is re-edited
+
+</details>
+
 ## v1.29.3 — 2026-11-25
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.29.2...v1.29.3)

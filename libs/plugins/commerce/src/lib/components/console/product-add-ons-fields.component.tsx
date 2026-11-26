@@ -82,6 +82,35 @@ export function newAddOnGroup(): CommerceModel.ProductModifierGroup {
 }
 
 /**
+ * A new write-in (write-ins): one field the shopper types into,
+ * such as a name to print or an engraving. Required, shown on the website,
+ * free until the merchant sets what it adds.
+ */
+export function newWriteInGroup(): CommerceModel.ProductModifierGroup {
+  return {
+    id: newId('g'),
+    name: '',
+    kind: 'text',
+    min: 1,
+    max: 1,
+    maxLength: CommerceModel.DEFAULT_WRITE_IN_LENGTH,
+    online: true,
+    options: [{ id: newId('o'), name: '', priceCents: 0 }],
+  }
+}
+
+/**
+ * A write-in renamed: its one option carries the same name, so every reader
+ * that names a pick by its option names the field.
+ */
+export function withWriteInName(
+  group: CommerceModel.ProductModifierGroup,
+  name: string,
+): Partial<CommerceModel.ProductModifierGroup> {
+  return { name, options: group.options.map((option, at) => (at === 0 ? { ...option, name } : option)) }
+}
+
+/**
  * A choice's prices by variant with one variant's price set or cleared. A
  * cleared price follows the choice's own; with none left the field is
  * dropped, never stored as `undefined` (the save is a client-direct write,
@@ -129,6 +158,100 @@ export function withChoiceCard(
     else delete next.includes
   }
   return next
+}
+
+interface WriteInFieldsProps {
+  group: CommerceModel.ProductModifierGroup
+  edit: (patch: Partial<CommerceModel.ProductModifierGroup>) => void
+  remove: () => void
+}
+
+/**
+ * One write-in in the editor (write-ins): what the field is
+ * called, how long an answer can be, what a filled one adds, the note under
+ * it, and whether it is required, numbers only and asked on the website.
+ */
+function WriteInFields(props: WriteInFieldsProps) {
+  const { group, edit, remove } = props
+  const option = group.options[0]
+  const editOption = (next: CommerceModel.ProductModifierOption) =>
+    edit({ options: group.options.map((entry, at) => (at === 0 ? next : entry)) })
+  const example = `${group.name || 'Engraving'}: ${group.digitsOnly ? '27' : 'For Sam'}`
+  return (
+    <Stack spacing={1.5}>
+      <Typography variant="overline" color="text.secondary">
+        {'Write-in'}
+      </Typography>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', flexWrap: 'wrap', rowGap: 1 }}>
+        <TextField
+          label="Field name"
+          size="small"
+          value={group.name}
+          placeholder="Engraving"
+          onChange={(event) => edit(withWriteInName(group, event.target.value))}
+          sx={{ flex: 1, minWidth: (theme) => theme.spacing(20) }}
+        />
+        <TextField
+          label="Longest answer"
+          size="small"
+          value={group.maxLength ?? CommerceModel.DEFAULT_WRITE_IN_LENGTH}
+          onChange={(event) =>
+            edit({
+              maxLength: Math.min(
+                CommerceModel.MAX_WRITE_IN_LENGTH,
+                Math.max(1, Math.round(Number(event.target.value) || 1)),
+              ),
+            })
+          }
+          helperText="Characters"
+          sx={{ width: (theme) => theme.spacing(15) }}
+          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+        />
+        <TextField
+          label="Adds ($)"
+          size="small"
+          defaultValue={dollarsFromCents(option?.priceCents)}
+          placeholder="0.00"
+          onBlur={(event) => option && editOption({ ...option, priceCents: centsFromDollars(event.target.value) })}
+          helperText="When filled in"
+          sx={{ width: (theme) => theme.spacing(15) }}
+          slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+        />
+        <Button color="error" onClick={remove}>
+          {'Remove write-in'}
+        </Button>
+      </Stack>
+      <TextField
+        label="Note"
+        size="small"
+        defaultValue={option?.note ?? ''}
+        placeholder="Exactly as it should read"
+        onBlur={(event) => option && editOption(withChoiceCard(option, { note: event.target.value }))}
+        helperText="Shown under the field on the product’s page."
+        slotProps={{ htmlInput: { maxLength: PRODUCT_CHOICE_NOTE_MAX } }}
+      />
+      <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', rowGap: 0.5 }}>
+        <FormControlLabel
+          control={<Switch checked={group.min > 0} onChange={(event) => edit({ min: event.target.checked ? 1 : 0 })} />}
+          label="Required"
+        />
+        <FormControlLabel
+          control={
+            <Switch checked={group.digitsOnly === true} onChange={(event) => edit({ digitsOnly: event.target.checked })} />
+          }
+          label="Numbers only"
+        />
+        <FormControlLabel
+          control={<Switch checked={group.online === true} onChange={(event) => edit({ online: event.target.checked })} />}
+          label="Show on the website"
+        />
+      </Stack>
+      <Typography variant="caption" color="text.secondary">
+        {`The answer goes on the order, the receipt and your order emails, like “${example}”.` +
+          (group.online === true ? '' : ' Asked at the register only.')}
+      </Typography>
+    </Stack>
+  )
 }
 
 /**
@@ -182,7 +305,8 @@ export const ProductAddOnsFields = memo(function ProductAddOnsFields(
         {'Add-ons are choices added to the item that don’t need their own stock, such as walls or ' +
           'printing on a canopy, or a milk in a latte. Each can be free or add to the price, and can ' +
           'cost more on a larger size. Show a group on the website to offer it on the product’s page; ' +
-          'the register offers every group.'}
+          'the register offers every group. A write-in asks the customer to type an answer, such as ' +
+          'a name to print, an engraving or a cake message, and puts it on the order.'}
       </Typography>
       {modifierGroups.map((group, groupIndex) => (
         <Box
@@ -191,6 +315,13 @@ export const ProductAddOnsFields = memo(function ProductAddOnsFields(
           aria-label={group.name || 'Add-on group'}
           sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2 }}
         >
+          {CommerceModel.modifierGroupIsWriteIn(group) ? (
+            <WriteInFields
+              group={group}
+              edit={(patch) => editGroup(groupIndex, patch)}
+              remove={() => setGroups(modifierGroups.filter((_group, at) => at !== groupIndex))}
+            />
+          ) : (
           <Stack spacing={1.5}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', flexWrap: 'wrap', rowGap: 1 }}>
               <TextField
@@ -241,6 +372,21 @@ export const ProductAddOnsFields = memo(function ProductAddOnsFields(
               {group.online === true
                 ? 'Offered on the product’s page and at the register.'
                 : 'Offered at the register only.'}
+            </Typography>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={group.nameOnOrder === true}
+                  onChange={(event) => editGroup(groupIndex, { nameOnOrder: event.target.checked })}
+                />
+              }
+              label="Name the group on the order"
+            />
+            <Typography variant="caption" color="text.secondary">
+              {group.nameOnOrder === true
+                ? `The order says “${group.name || 'Size'}: ${group.options[0]?.name || 'M'}”.`
+                : `The order says “${group.options[0]?.name || 'M'}”. Turn this on when a choice ` +
+                  'doesn’t say what it is on its own, like a size.'}
             </Typography>
             {group.options.map((option, optionIndex) => {
               const optionKey = `${group.id}:${option.id}`
@@ -409,17 +555,28 @@ export const ProductAddOnsFields = memo(function ProductAddOnsFields(
               </Button>
             </Box>
           </Stack>
+          )}
         </Box>
       ))}
       <Box>
-        <Button
-          variant="outlined"
-          aria-describedby={helpId}
-          onClick={() => setGroups([...modifierGroups, newAddOnGroup()])}
-          disabled={modifierGroups.length >= CommerceModel.POS_MAX_MODIFIER_GROUPS}
-        >
-          {'New add-on group'}
-        </Button>
+        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+          <Button
+            variant="outlined"
+            aria-describedby={helpId}
+            onClick={() => setGroups([...modifierGroups, newAddOnGroup()])}
+            disabled={modifierGroups.length >= CommerceModel.POS_MAX_MODIFIER_GROUPS}
+          >
+            {'New add-on group'}
+          </Button>
+          <Button
+            variant="outlined"
+            aria-describedby={helpId}
+            onClick={() => setGroups([...modifierGroups, newWriteInGroup()])}
+            disabled={modifierGroups.length >= CommerceModel.POS_MAX_MODIFIER_GROUPS}
+          >
+            {'New write-in'}
+          </Button>
+        </Stack>
       </Box>
       {problem && modifierGroups.length ? (
         <Typography variant="body2" color="warning.main">

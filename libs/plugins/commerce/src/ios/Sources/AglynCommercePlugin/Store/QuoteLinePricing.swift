@@ -55,7 +55,7 @@ func priceQuoteCatalogLine(
     // Firestore hands a map's keys back sorted, so the values are read in key order, as the register reads them.
     let options = variant.options ?? [:]
     let variantLabel = options.isEmpty ? nil : options.keys.sorted().compactMap { options[$0] }.joined(separator: " / ")
-    let label = lineLabelWithModifiers(variantLabel, chosen.map(\.name))
+    let label = lineLabelWithModifiers(variantLabel, chosen.map(\.lineText))
     let unitCents = included ? 0 : ((price ?? 0) * 100 + 0.5).rounded(.down) + Double(extraCents)
     return .ok(
       OrderLineItem(
@@ -65,7 +65,8 @@ func priceQuoteCatalogLine(
           ? nil
           : chosen.map {
             OrderLineModifier(
-              group: $0.group, groupId: $0.groupID, name: $0.name, optionId: $0.optionID, priceCents: Double($0.priceCents))
+              group: $0.group, groupId: $0.groupID, name: $0.name, nameOnOrder: $0.nameOnOrder ? true : nil,
+              optionId: $0.optionID, priceCents: Double($0.priceCents), text: $0.text)
           },
         name: name, productId: productID, productType: product.type ?? .physical, quantity: quantity,
         sku: variant.sku?.isEmpty == false ? variant.sku : nil, taxExempt: product.taxExempt == true ? true : nil,

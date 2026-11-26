@@ -29,6 +29,7 @@ import { computeTaxCents, resolveTaxRate, type TaxSettings } from './commerce-ta
 import { storefrontTaxDecision, type StorefrontTaxMode } from './commerce-tax-decision'
 import { allocateCentsByWeight } from './commerce-tax-engine'
 import {
+  cleanWriteIn,
   lineLabelWithModifiers,
   modifierOptionPriceCents,
   resolveLineModifiers,
@@ -770,7 +771,8 @@ function parseLine(raw: unknown, index: number): QuoteLineRequest | string {
     const modifiers = Array.isArray(source['modifiers'])
       ? (source['modifiers'] as unknown[]).slice(0, 200).map((entry) => {
           const pick = (entry ?? {}) as Record<string, unknown>
-          return { groupId: clean(pick['groupId']), optionId: clean(pick['optionId']) }
+          const text = cleanWriteIn(pick['text'])
+          return { groupId: clean(pick['groupId']), optionId: clean(pick['optionId']), ...(text ? { text } : {}) }
         })
       : []
     return {
@@ -978,7 +980,13 @@ export function quoteLineRequestFromLine(line: OrderLineItem): QuoteLineRequest 
     ...(line.variantId ? { variantId: line.variantId } : {}),
     quantity: line.quantity,
     ...(line.modifiers?.length
-      ? { modifiers: line.modifiers.map(({ groupId, optionId }) => ({ groupId, optionId })) }
+      ? {
+          modifiers: line.modifiers.map(({ groupId, optionId, text }) => ({
+            groupId,
+            optionId,
+            ...(text ? { text } : {}),
+          })),
+        }
       : {}),
     ...(line.included ? { included: true } : {}),
     ...(line.description ? { description: line.description } : {}),

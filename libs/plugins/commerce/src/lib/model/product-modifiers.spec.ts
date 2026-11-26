@@ -283,3 +283,116 @@ describe('a paid line’s add-ons (AGL-4100)', () => {
     ])
   })
 })
+
+describe('write-ins: the gear set builder', () => {
+  const size = (id: string, name: string, values: string[]): ProductModifierGroup => ({
+    id,
+    name,
+    min: 1,
+    max: 1,
+    online: true,
+    nameOnOrder: true,
+    options: values.map((value) => ({ id: `${id}-${value}`, name: value, priceCents: 0 })),
+  })
+  const NAME: ProductModifierGroup = {
+    id: 'name',
+    name: 'Name on jersey',
+    kind: 'text',
+    min: 1,
+    max: 1,
+    maxLength: 14,
+    online: true,
+    options: [{ id: 'name-o', name: 'Name on jersey', priceCents: 0 }],
+  }
+  const NUMBER: ProductModifierGroup = {
+    id: 'number',
+    name: 'Number',
+    kind: 'text',
+    min: 1,
+    max: 1,
+    maxLength: 3,
+    digitsOnly: true,
+    online: true,
+    options: [{ id: 'number-o', name: 'Number', priceCents: 500 }],
+  }
+  const SET = {
+    name: 'Summit Race Set',
+    modifierGroups: [
+      size('jersey', 'Jersey size', ['S', 'M', 'L', 'XL', '2XL', '3XL']),
+      size('pants', 'Pant size', ['28', '30', '32', '34', '36', '38', '40']),
+      size('gloves', 'Glove size', ['S', 'M', 'L', 'XL', '2XL']),
+      NAME,
+      NUMBER,
+    ],
+  }
+  const picks = (name: string, number: string) => [
+    { groupId: 'jersey', optionId: 'jersey-L' },
+    { groupId: 'pants', optionId: 'pants-32' },
+    { groupId: 'gloves', optionId: 'gloves-M' },
+    { groupId: 'name', optionId: 'name-o', text: name },
+    { groupId: 'number', optionId: 'number-o', text: number },
+  ]
+
+  it('saves: one field per write-in, required or not, and any number of size groups', () => {
+    expect(modifierGroupsProblem(SET.modifierGroups)).toBeNull()
+    expect(modifierGroupsProblem([{ ...NAME, options: [...NAME.options, { id: 'x', name: 'x', priceCents: 0 }] }])).toMatch(
+      /holds one field/,
+    )
+    expect(modifierGroupsProblem([{ ...NAME, min: 2, max: 2 }])).toMatch(/one answer/)
+    expect(modifierGroupsProblem([{ ...NAME, maxLength: 41 }])).toMatch(/1 to 40 characters/)
+    expect(modifierGroupsProblem([{ ...NAME, kind: 'photo' as any }])).toMatch(/choices or a write-in/)
+    const gearSet = {
+      name: 'Summit Race Set',
+      slug: 'summit-race-set',
+      type: 'physical',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 250 }],
+      modifierGroups: SET.modifierGroups,
+    } as any
+    expect(validateProduct(gearSet)).toBeNull()
+  })
+
+  it('prices every piece and keeps the name and number on the line, with no cap on combinations', () => {
+    const resolved = resolveWebsiteLineModifiers(SET, picks('  SMITH \n', '27'))
+    expect(resolved.ok).toBe(true)
+    expect(resolved.extraCents).toBe(500)
+    expect(resolved.modifiers.map((modifier) => modifier.text ?? modifier.name)).toEqual(['L', '32', 'M', 'SMITH', '27'])
+    expect(lineLabelWithModifiers(undefined, resolved.modifiers)).toBe(
+      'Jersey size: L, Pant size: 32, Glove size: M, Name on jersey: SMITH, Number: 27',
+    )
+  })
+
+  it('asks for a required write-in and refuses an answer that does not fit', () => {
+    expect(resolveWebsiteLineModifiers(SET, picks('', '27')).error).toBe('Fill in name on jersey for Summit Race Set.')
+    expect(resolveWebsiteLineModifiers(SET, picks('SMITH', '2a')).error).toMatch(/Number takes numbers only/)
+    expect(resolveWebsiteLineModifiers(SET, picks('A VERY LONG NAME HERE', '27')).error).toMatch(/up to 14 characters/)
+    const optional = { ...SET, modifierGroups: SET.modifierGroups.map((g) => (g.id === 'name' ? { ...g, min: 0 } : g)) }
+    const resolved = resolveWebsiteLineModifiers(optional, picks('', '27'))
+    expect(resolved.ok).toBe(true)
+    expect(resolved.modifiers.some((modifier) => modifier.groupId === 'name')).toBe(false)
+  })
+
+  it('carries the answer through the cart, the payment metadata and the paid order', () => {
+    const resolved = resolveWebsiteLineModifiers(SET, picks('SMITH', '27'))
+    const selection = modifierSelectionOf(resolved.modifiers)
+    expect(selection[3]).toEqual({ groupId: 'name', optionId: 'name-o', text: 'SMITH' })
+    const metadata = encodeModifierSelection(selection)
+    expect(metadata.length).toBeLessThanOrEqual(500)
+    const back = decodeModifierSelection(metadata)
+    expect(back).toEqual(selection)
+    expect(soldLineModifiers(SET, back).find((modifier) => modifier.groupId === 'number')).toMatchObject({
+      text: '27',
+      priceCents: 500,
+    })
+    expect(modifierSelectionFrom([{ groupId: 'name', optionId: 'name-o', text: 'A\u0000B' }])[0].text).toBe('A B')
+  })
+
+  it('makes two riders two cart lines', () => {
+    expect(modifierSelectionKey(picks('SMITH', '27'))).not.toBe(modifierSelectionKey(picks('JONES', '27')))
+    expect(modifierSelectionKey(picks('SMITH', '27'))).toBe(modifierSelectionKey(picks('SMITH', '27')))
+  })
+
+  it('leaves a choice without a group name as it always printed', () => {
+    expect(lineLabelWithModifiers('Large', [{ name: 'Oat milk', group: 'Milk' }])).toBe('Large / Oat milk')
+  })
+})

@@ -336,6 +336,15 @@ private struct KioskItemSheet: View {
           }
         }
         ForEach(item.modifierGroups, id: \.id) { group in
+          if group.isWriteIn {
+            // A write-in (write-ins): the customer types the answer, such as the text to engrave.
+            WriteInFieldSection(
+              group: group, variantID: variantID, text: picks.first { $0.groupId == group.id }?.text ?? "", money: model.money
+            ) { typed in
+              picks = withWriteInAnswer(item.modifierGroups, picks, group: group, text: typed)
+              problem = nil
+            }
+          } else {
           Section {
             ForEach(group.options, id: \.id) { option in
               let chosen = picks.contains { $0.groupId == group.id && $0.optionId == option.id }
@@ -361,6 +370,7 @@ private struct KioskItemSheet: View {
           } footer: {
             Text(group.isRequired ? "Required" : group.isSingle ? "Optional" : "Choose up to \(Int(group.max))")
           }
+          }
         }
         Section {
           HStack {
@@ -369,16 +379,31 @@ private struct KioskItemSheet: View {
             AglynQuantityStepper(value: quantity, range: 1...Int(ContractValues.shared.posKioskMaxQuantity)) { quantity = $0 }
           }
           if let problem { AglynNotice(problem, tone: .error) }
+        } footer: {
+          if problem == nil, let why = blockedReason { Text(why) }
         }
       }
       .formStyle(.grouped)
       .navigationTitle(product.name)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: close) }
-        ToolbarItem(placement: .confirmationAction) { Button("Add", action: add).accessibilityIdentifier("kiosk-item-add") }
+        ToolbarItem(placement: .confirmationAction) { Button("Add", action: add).disabled(blocked).accessibilityIdentifier("kiosk-item-add") }
       }
     }
     .presentationDetents([.medium, .large])
+  }
+
+  /// Add stays off until every required choice and write-in is answered and each answer fits.
+  private var blocked: Bool {
+    item.variants.contains { $0.id == variantID } ? blockedReason != nil : true
+  }
+
+  /// What is left to answer, as the sale would refuse it.
+  private var blockedReason: String? {
+    let item = item
+    guard let variant = item.variants.first(where: { $0.id == variantID }) else { return nil }
+    if case .problem(let why) = pick(item, variant, modifiers: picks) { return why }
+    return nil
   }
 
   private func toggle(_ group: ProductModifierGroup, _ optionID: String) {

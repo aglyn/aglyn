@@ -16,7 +16,7 @@
  */
 
 import { posTipFromPercent, posTipProblem, type PosReceiptChannel } from './commerce-pos'
-import { modifierOptionPriceCents, type ModifierSelection, type ProductModifierGroup } from './product-modifiers'
+import { cleanWriteIn, modifierOptionPriceCents, type ModifierSelection, type ProductModifierGroup } from './product-modifiers'
 
 /*==========================================
  * THE SELF-SERVICE KIOSK (AGL-3623).
@@ -209,7 +209,9 @@ export function sanitizePosKioskLines(
       if (!ID_PATTERN.test(groupId) || !ID_PATTERN.test(optionId)) {
         return { ok: false, error: 'A choice on an item is no longer offered.' }
       }
-      modifiers.push({ groupId, optionId })
+      // A write-in's answer (write-ins), checked against its group when the order is priced.
+      const text = cleanWriteIn(pick?.['text'])
+      modifiers.push(text ? { groupId, optionId, text } : { groupId, optionId })
     }
     lines.push({
       productId,

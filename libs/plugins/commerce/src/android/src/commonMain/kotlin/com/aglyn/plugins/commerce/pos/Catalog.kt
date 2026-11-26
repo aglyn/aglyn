@@ -91,12 +91,18 @@ fun modifierGroupsFrom(raw: Any?): List<ProductModifierGroup> {
       min = group["min"].asDouble() ?: return emptyList(),
       max = group["max"].asDouble() ?: return emptyList(),
       online = group["online"] as? Boolean,
+      // A write-in (write-ins) and a group that names itself on the order.
+      kind = group["kind"] as? String,
+      maxLength = group["maxLength"].asDouble(),
+      digitsOnly = group["digitsOnly"] as? Boolean,
+      nameOnOrder = group["nameOnOrder"] as? Boolean,
       options = group["options"].asList().map { item ->
         val option = item.asMap() ?: return emptyList()
         ProductModifierOption(
           id = option["id"] as? String ?: "",
           name = option["name"] as? String ?: "",
           priceCents = option["priceCents"].asDouble() ?: return emptyList(),
+          note = option["note"] as? String,
           priceCentsByVariant = option["priceCentsByVariant"]?.let { stored ->
             val prices = stored.asMap() ?: return emptyList()
             prices.entries.associate { (id, cents) -> id.toString() to (cents.asDouble() ?: return emptyList()) }
@@ -163,8 +169,8 @@ fun pickOf(item: PosItem, variant: PosVariant, modifiers: List<ModifierSelection
         // server rings up when no `variantId` is sent.
         variantId = variant.id.takeIf { it != "default" },
         name = item.name,
-        variantLabel = lineLabelWithModifiers(variant.label, resolved.modifiers.map { it.name }).ifEmpty { null },
-        modifiers = resolved.modifiers.map { ModifierSelection(it.groupId, it.optionId) },
+        variantLabel = lineLabelWithModifiers(variant.label, resolved.modifiers).ifEmpty { null },
+        modifiers = modifierSelectionOf(resolved.modifiers),
         unitCents = unit + resolved.extraCents,
       ),
     )

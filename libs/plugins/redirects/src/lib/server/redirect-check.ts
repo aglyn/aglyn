@@ -18,6 +18,7 @@
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { readAllRedirectRules } from './read-redirect-rules'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/tenant-apex'
 import {
   findDuplicateRedirect,
@@ -93,9 +94,6 @@ export function checkRedirectSave(
   return { ok: true, source, destination, statusCode, kind, notice }
 }
 
-/** Rules a check reads, past the page's 200-rule window, so a duplicate or loop beyond it is still caught. */
-const RULES_WINDOW = 500
-
 /**
  * `POST /api/redirects/check`: runs {@link checkRedirectSave} for a member
  * who may publish on the site (the role the Firestore rules gate redirect
@@ -126,8 +124,9 @@ export const redirectCheckHandler: PluginApiHandler = async (req, res) => {
     if (!holdsSiteKey(host, decoded.uid, 'site.publish')) {
       return res.status(403).json({ error: siteKeyRefusal('site.publish') })
     }
-    const snapshot = await hostRef.collection('redirects').limit(RULES_WINDOW).get()
-    const rules = snapshot.docs.map((doc: { id: string; data: () => Record<string, unknown> }) => ({ $id: doc.id, ...doc.data() }))
+    // Every rule, past the page's 200-rule window, so a duplicate or loop anywhere is caught (AGL-4247).
+    const docs = await readAllRedirectRules(hostRef.collection('redirects'))
+    const rules = docs.map((doc: { id: string; data: () => Record<string, unknown> }) => ({ $id: doc.id, ...doc.data() }))
     return res.status(200).json(checkRedirectSave(draft, host.data() ?? {}, rules))
   } catch (error) {
     console.error('[redirects/check]', error)

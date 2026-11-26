@@ -63,7 +63,7 @@ fun priceQuoteCatalogLine(rawProduct: HostProduct?, request: QuoteLineRequest.Ca
   val chosen = resolveLineModifiers(name, productModifierGroups(product), request.modifiers, variant.id)
   if (chosen is ResolvedModifiers.Refused) return PricedQuoteLine.Refused(chosen.error)
   chosen as ResolvedModifiers.Ok
-  val label = lineLabelWithModifiers(variantOptionsLabel(variant.options), chosen.modifiers.map { it.name }).ifEmpty { null }
+  val label = lineLabelWithModifiers(variantOptionsLabel(variant.options), chosen.modifiers).ifEmpty { null }
   val unitCents = if (request.included) 0.0 else kotlin.math.floor((variant.priceUsd ?: 0.0) * 100 + 0.5) + chosen.extraCents
   return PricedQuoteLine.Ok(
     OrderLineItem(
@@ -76,7 +76,10 @@ fun priceQuoteCatalogLine(rawProduct: HostProduct?, request: QuoteLineRequest.Ca
       quantity = request.quantity,
       unitAmountCents = unitCents,
       modifiers = chosen.modifiers.takeIf { it.isNotEmpty() }?.map {
-        OrderLineModifier(group = it.group, groupId = it.groupId, name = it.name, optionId = it.optionId, priceCents = it.priceCents.toDouble())
+        OrderLineModifier(
+          group = it.group, groupId = it.groupId, name = it.name, optionId = it.optionId, priceCents = it.priceCents.toDouble(),
+          text = it.text, nameOnOrder = if (it.nameOnOrder) true else null,
+        )
       },
       included = if (request.included) true else null,
       description = request.description?.takeIf { it.isNotEmpty() },

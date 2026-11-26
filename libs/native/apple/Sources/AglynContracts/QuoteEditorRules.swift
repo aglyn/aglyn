@@ -228,7 +228,9 @@ public func quoteLineRequestFromLine(_ line: OrderLineItem) -> QuoteLineRequest 
   }
   return .catalog(
     productId: line.productId, variantId: nonEmpty(line.variantId), quantity: line.quantity,
-    modifiers: (line.modifiers ?? []).map { ModifierSelection(groupId: $0.groupId, optionId: $0.optionId) },
+    modifiers: (line.modifiers ?? []).map {
+      ModifierSelection(groupId: $0.groupId, optionId: $0.optionId, text: $0.text?.isEmpty == false ? $0.text : nil)
+    },
     included: line.included == true, description: nonEmpty(line.description))
 }
 

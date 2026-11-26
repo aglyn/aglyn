@@ -1107,6 +1107,36 @@ function QuoteLineEditor(props: {
               </Stack>
             )}
             {groups.map((group) => {
+              // A write-in (write-ins): the answer the customer gave, typed into the quote.
+              if (CommerceModel.modifierGroupIsWriteIn(group)) {
+                const option = group.options[0]
+                const text =
+                  line.kind === 'catalog' ? (line.modifiers.find((pick) => pick.groupId === group.id)?.text ?? '') : ''
+                const problem = CommerceModel.writeInProblem(group, text)
+                return (
+                  <TextField
+                    key={group.id}
+                    label={CommerceModel.modifierGroupRequired(group) ? group.name : `${group.name} (optional)`}
+                    size="small"
+                    fullWidth
+                    value={text}
+                    disabled={disabled || !option}
+                    error={Boolean(problem)}
+                    helperText={problem ?? undefined}
+                    slotProps={{ htmlInput: { maxLength: CommerceModel.writeInMaxLength(group) } }}
+                    onChange={(event) => {
+                      if (line.kind !== 'catalog' || !option) return
+                      const typed = event.target.value
+                      onChange({
+                        modifiers: [
+                          ...line.modifiers.filter((pick) => pick.groupId !== group.id),
+                          ...(typed.trim() ? [{ groupId: group.id, optionId: option.id, text: typed }] : []),
+                        ],
+                      })
+                    }}
+                  />
+                )
+              }
               const chosen = line.kind === 'catalog' ? line.modifiers.filter((pick) => pick.groupId === group.id).map((pick) => pick.optionId) : []
               return (
                 <TextField

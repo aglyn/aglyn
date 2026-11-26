@@ -120,7 +120,7 @@ struct QuoteLineDraft: Identifiable, Equatable {
       if !variantID.isEmpty { fields["variantId"] = .string(variantID) }
       if !modifiers.isEmpty {
         fields["modifiers"] = .array(
-          modifiers.map { .object(["groupId": .string($0.groupId), "optionId": .string($0.optionId)]) })
+          modifiers.map(modifierSelectionJSON))
       }
     case .custom:
       fields["name"] = .string(name.trimmingCharacters(in: .whitespaces))
@@ -334,7 +334,8 @@ struct QuoteEditorStart: Identifiable {
       draftLine.quantity = String(Int(quantity > 0 ? quantity : 1))
       draftLine.modifiers = (line["modifiers"]?.arrayValue ?? []).compactMap { pick in
         guard let group = pick["groupId"]?.stringValue, let option = pick["optionId"]?.stringValue else { return nil }
-        return ModifierSelection(groupId: group, optionId: option)
+        // A write-in's answer from the request (write-ins).
+        return ModifierSelection(groupId: group, optionId: option, text: cleanWriteIn(pick["text"]?.stringValue).nilIfEmpty)
       }
       draftLine.description = line["description"]?.stringValue ?? ""
       draftLine.included = line["included"]?.boolValue == true
@@ -689,7 +690,31 @@ struct QuoteEditorSheet: View {
     let label = modifierGroupRequired(group) ? group.name : "\(group.name) (optional)"
     let variantID = line.wrappedValue.variantID.isEmpty ? nil : line.wrappedValue.variantID
     let chosen = line.wrappedValue.modifiers.filter { $0.groupId == group.id }.map(\.optionId)
-    if group.max > 1 {
+    if group.isWriteIn {
+      // A write-in (write-ins): the answer the customer gave, typed into the quote.
+      let text = line.wrappedValue.modifiers.first { $0.groupId == group.id }?.text ?? ""
+      let problem = writeInProblem(group, text)
+      VStack(alignment: .leading, spacing: 2) {
+        TextField(
+          label,
+          text: Binding(
+            get: { text },
+            set: { typed in
+              let held = writeInTyped(group, typed)
+              line.wrappedValue.modifiers.removeAll { $0.groupId == group.id }
+              if let option = group.options.first, !held.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                line.wrappedValue.modifiers.append(ModifierSelection(groupId: group.id, optionId: option.id, text: held))
+              }
+            })
+        )
+        .autocorrectionDisabled()
+        #if os(iOS)
+          .keyboardType(group.digitsOnly == true ? .numberPad : .default)
+        #endif
+        .accessibilityIdentifier("quote-write-in-\(group.id)")
+        if let problem { Text(problem).font(AglynFont.caption).foregroundStyle(AglynColor.error) }
+      }
+    } else if group.max > 1 {
       VStack(alignment: .leading) {
         Text(label).font(AglynFont.caption).foregroundStyle(.secondary)
         ForEach(group.options, id: \.id) { option in

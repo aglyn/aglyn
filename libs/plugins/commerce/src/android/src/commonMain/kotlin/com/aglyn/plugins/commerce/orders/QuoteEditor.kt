@@ -67,6 +67,11 @@ import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
 import com.aglyn.ui.space
 import kotlinx.coroutines.delay
+import com.aglyn.plugins.commerce.pos.isWriteIn
+import com.aglyn.plugins.commerce.pos.writeInAnswer
+import com.aglyn.plugins.commerce.pos.writeInInput
+import com.aglyn.plugins.commerce.pos.writeInMaxLength
+import com.aglyn.plugins.commerce.pos.writeInProblem
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -164,7 +169,14 @@ data class QuoteLineDraft(
       fields["productId"] = JsonPrimitive(productId)
       if (variantId.isNotEmpty()) fields["variantId"] = JsonPrimitive(variantId)
       if (modifiers.isNotEmpty()) {
-        fields["modifiers"] = JsonArray(modifiers.map { JsonObject(mapOf("groupId" to JsonPrimitive(it.groupId), "optionId" to JsonPrimitive(it.optionId))) })
+        fields["modifiers"] = JsonArray(
+          modifiers.map { pick ->
+            val entry = mutableMapOf<String, JsonElement>("groupId" to JsonPrimitive(pick.groupId), "optionId" to JsonPrimitive(pick.optionId))
+            // A write-in's answer (write-ins); the server cleans and checks it.
+            pick.text?.takeIf { it.isNotBlank() }?.let { entry["text"] = JsonPrimitive(it) }
+            JsonObject(entry)
+          },
+        )
       }
     }
     return JsonObject(fields)
@@ -316,7 +328,11 @@ data class QuoteEditorStart(
           quantity = ((line["quantity"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it > 0 } ?: 1.0).toLong().toString(),
           modifiers = (line["modifiers"] as? JsonArray).orEmpty().mapNotNull { pick ->
             val o = pick as? JsonObject ?: return@mapNotNull null
-            com.aglyn.contracts.ModifierSelection(groupId = text(o, "groupId").ifEmpty { return@mapNotNull null }, optionId = text(o, "optionId").ifEmpty { return@mapNotNull null })
+            com.aglyn.contracts.ModifierSelection(
+              groupId = text(o, "groupId").ifEmpty { return@mapNotNull null },
+              optionId = text(o, "optionId").ifEmpty { return@mapNotNull null },
+              text = com.aglyn.plugins.commerce.pos.cleanWriteIn(text(o, "text")).ifEmpty { null },
+            )
           },
           description = text(line, "description"), included = (line["included"] as? JsonPrimitive)?.booleanOrNull == true,
         )
@@ -731,6 +747,30 @@ private fun ModifierField(group: ProductModifierGroup, line: QuoteLineDraft, ena
   val label = if (modifierGroupRequired(group)) group.name else "${group.name} (optional)"
   val variantId = line.variantId.ifEmpty { null }
   val chosen = line.modifiers.filter { it.groupId == group.id }.map { it.optionId }
+  if (group.isWriteIn()) {
+    // A write-in (write-ins): the answer the customer gave, typed into the quote.
+    val option = group.options.firstOrNull()
+    val typed = writeInAnswer(line.modifiers, group)
+    val problem = writeInProblem(group, typed)
+    val limit = group.writeInMaxLength()
+    OutlinedTextField(
+      typed,
+      { next ->
+        if (option == null) return@OutlinedTextField
+        val cut = writeInInput(next, limit)
+        val rest = line.modifiers.filterNot { it.groupId == group.id }
+        onChange(line.copy(modifiers = if (cut.isBlank()) rest else rest + ModifierSelection(groupId = group.id, optionId = option.id, text = cut)))
+      },
+      label = { Text(label) },
+      enabled = enabled && option != null,
+      singleLine = true,
+      isError = problem != null,
+      supportingText = problem?.let { { Text(it) } },
+      keyboardOptions = KeyboardOptions(keyboardType = if (group.digitsOnly == true) KeyboardType.Number else KeyboardType.Text),
+      modifier = Modifier.fillMaxWidth().testTag("quote-writein-${group.id}"),
+    )
+    return
+  }
   if (group.max > 1) {
     Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     group.options.forEach { option ->

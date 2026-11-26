@@ -88,6 +88,11 @@ export interface PublicModifierGroup {
   name: string
   min: number
   max: number
+  /** A write-in the shopper types (write-ins), with its length and whether it takes numbers only. */
+  kind?: CommerceModel.ProductModifierGroupKind
+  maxLength?: number
+  digitsOnly?: boolean
+  nameOnOrder?: boolean
   options: Array<{
     id: string
     name: string
@@ -110,6 +115,14 @@ export function publicModifierGroups(
     name: group.name,
     min: group.min,
     max: group.max,
+    ...(CommerceModel.modifierGroupIsWriteIn(group)
+      ? {
+          kind: 'text' as const,
+          maxLength: CommerceModel.writeInMaxLength(group),
+          ...(group.digitsOnly === true ? { digitsOnly: true } : {}),
+        }
+      : {}),
+    ...(group.nameOnOrder === true ? { nameOnOrder: true } : {}),
     options: group.options.map((option) => ({
       id: option.id,
       name: option.name,
