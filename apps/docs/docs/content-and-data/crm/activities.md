@@ -137,6 +137,7 @@ is shown locked, so there is no record page to log from.
 | **What happened** | The body of the entry. |
 | **Outcome** | For a call or a meeting: how it ended — "left a voicemail", "agreed to a trial". |
 | **Minutes** | For a call or a meeting: how long it took. |
+| **Recording** | For a call or a meeting: the recording and its transcript — see [A call's recording and transcript](#call-recordings). |
 | **Name** | The contact it was with. Opened from a contact, that contact; opened from a deal, the deal's Primary, with everyone on the deal at the top of the list, whatever their contact role. |
 | **Related To** | The company or the deal it is about. Opened from a company or a deal, that record. The open deals of the contact in **Name**, and of the company, lead the list. |
 
@@ -154,6 +155,41 @@ their own entries; an org-wide member can edit or delete anyone's. A colleague
 with access to only some of your sites can read an entry they did not write, and
 cannot change it. Correcting an entry can change its **Name** and **Related To**
 too, and it moves to the timelines they name.
+
+### A call's recording and transcript {#call-recordings}
+
+A **call** or a **meeting** can carry its recording. In **Log activity**, or when
+you edit the entry later, the **Recording** section takes an MP3, M4A (what
+iPhone's Voice Memos saves), WAV, AAC or OGG file up to 50 MB: choose **Upload
+recording**, or drop the file on the box. **Choose from library** attaches an audio
+file already in your media library instead. An entry holds up to 5 recordings.
+
+Before a recording uploads, tick **Everyone on this call knew it was being
+recorded**. The answer is saved on the file, with who gave it and when. Whether
+you need everyone's agreement to record a call depends on where you and they are,
+so check the rules that apply to you.
+
+The file goes to your workspace's media library, into **CRM › Calls** (made for you
+the first time), and is **private**: it has no public link, and it plays only for
+teammates who can see your media library, through a link that expires. Uploading
+audio needs a plan with file uploads, and the file counts toward your storage.
+
+On the contact's, the company's and the deal's timeline, the entry shows a
+**Recording** chip. Open it to play the recording: play, pause and scrub with the
+player, pick a speed from 0.75× to 2×, or download it.
+
+**Transcript** holds what was said, as text. Paste it, or choose **Load transcript
+(.txt)** to read a text file, such as the transcript your phone made of the
+recording. It shows under the player behind **Show transcript**, and the search in
+the console's top bar finds an entry by the words in it. Aglyn does not write a
+transcript for you.
+
+Erasing a person (**Erase this person** on their contact) deletes the recordings on
+their activities along with the activities. Other files attached to the record are
+kept.
+
+The [REST API](/api/resources/activities#attach-a-recording) takes the same
+`mediaIds` and `transcript`, on a new activity or added later.
 
 ### Who, what and which company {#who-what-and-which-company}
 

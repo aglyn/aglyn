@@ -738,6 +738,19 @@ export function buildCustomerApiOpenApi(
         folderId: { type: 'string', description: 'The folder to put the file in, by id.' },
         alt: { type: 'string', description: 'Alt text.' },
         private: { type: 'boolean', description: '`true` stores it restricted: no `cdnUrl`, no public link.' },
+        rightsConfirmed: {
+          type: 'boolean',
+          description:
+            'Required `true` for audio. For music: you own it or hold a license to use it on your site. ' +
+            'With `purpose: "callRecording"`: everyone on the call knew it was being recorded. Stored on the file.',
+        },
+        purpose: {
+          type: 'string',
+          enum: ['callRecording'],
+          description:
+            'What an audio file is for when it is not music. `callRecording` is a recording of a call or a meeting, ' +
+            'attached to a CRM activity; send it with `private: true`.',
+        },
       },
       additionalProperties: true,
     },

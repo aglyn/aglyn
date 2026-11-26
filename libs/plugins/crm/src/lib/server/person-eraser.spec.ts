@@ -87,6 +87,9 @@ function docRef(path: string): any {
       docs.set(path, applyPatch(existing, value))
     },
     delete: async () => void docs.delete(path),
+    set: async (value: Record<string, any>) => {
+      docs.set(path, applyPatch(docs.get(path) ?? {}, value))
+    },
     collection: (name: string) => collectionRef(`${path}/${name}`),
   }
 }
@@ -119,6 +122,7 @@ const store: any = {
     return {
       delete: (ref: any) => void queued.push(() => ref.delete()),
       update: (ref: any, value: Record<string, any>) => void queued.push(() => ref.update(value)),
+      set: (ref: any, value: Record<string, any>) => void queued.push(() => ref.set(value)),
       commit: async () => {
         for (const write of queued) await write()
       },
@@ -131,7 +135,13 @@ const EMAIL = 'jane@example.com'
 const KEY = createHash('sha256').update(EMAIL).digest('hex')
 const TARGET = { orgId: ORG, email: EMAIL, key: KEY, dryRun: false, atMs: 1000 }
 
-const eraser = createCrmPersonEraser({ firestore: () => store })
+/** The bucket objects the eraser deleted, by path. */
+const deletedObjects: string[] = []
+const bucket = {
+  file: (path: string) => ({ delete: async () => void deletedObjects.push(path) }),
+}
+
+const eraser = createCrmPersonEraser({ firestore: () => store, bucket: () => bucket })
 
 /** What the erasure told the plugins it removed (AGL-3330). */
 const removed: Array<PluginEventPayloads['host.records.removed']> = []
@@ -180,6 +190,7 @@ function seed() {
 beforeEach(() => {
   docs.clear()
   removed.length = 0
+  deletedObjects.length = 0
   resetPluginEventHandlersForTests()
   registerPluginEventHandler('host.records.removed', (payload) => void removed.push(payload), {
     pluginId: 'forms',
@@ -237,6 +248,30 @@ describe('erase', () => {
     expect(docs.has(`orgs/${ORG}/crmActivities/a1`)).toBe(false)
     expect(docs.has(`orgs/${ORG}/crmActivities/a2`)).toBe(false)
     expect(report).toMatchObject({ deals: 1, tasks: 1, activities: 2 })
+  })
+
+  it('destroys the call recordings filed on the person’s activities, and keeps every other attached file', async () => {
+    docs.set(`orgs/${ORG}/crmActivities/a3`, {
+      kind: 'call',
+      body: 'Discovery call',
+      contactId: 'c1',
+      mediaIds: ['rec1', 'brochure'],
+    })
+    docs.set(`orgs/${ORG}/media/rec1`, {
+      fileName: 'call.m4a',
+      sizeBytes: 1200,
+      storagePath: `orgs/${ORG}/media/crm/calls/rec1`,
+      rightsConfirmation: { uid: 'u1', atMs: 1, statement: 'x', purpose: 'callRecording' },
+    })
+    docs.set(`orgs/${ORG}/media/brochure`, { fileName: 'brochure.pdf', sizeBytes: 900 })
+    docs.set(`orgs/${ORG}/counters/media`, { bytes: 5000, count: 4 })
+    const report = await erase()
+    expect(docs.has(`orgs/${ORG}/media/rec1`)).toBe(false)
+    expect(deletedObjects).toContain(`orgs/${ORG}/media/crm/calls/rec1`)
+    expect(docs.has(`orgs/${ORG}/media/brochure`)).toBe(true)
+    expect(docs.get(`orgs/${ORG}/counters/media`)).toEqual({ bytes: 3800, count: 3 })
+    expect(docs.has(`orgs/${ORG}/crmActivities/a3`)).toBe(false)
+    expect(report).toMatchObject({ recordings: 1, activities: 3 })
   })
 
   it('takes the person off every deal’s contact roles, and its Primary with them (AGL-3521)', async () => {

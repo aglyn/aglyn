@@ -17,10 +17,12 @@ An activity about a deal or a contact **rolls up to their company**: send no
 response says which. That is what puts a call with a person on their company's
 timeline, and it is what `GET /v1/activities?companyId=` lists.
 
-An activity is a **log entry, and a log is written once.** There is no `PATCH`: an
-entry that turns out to be wrong is deleted and logged again, which keeps every row's
-`at` and `byUid` the record of what was logged rather than what somebody later wished
-had been.
+An activity is a **log entry, and a log is written once.** What was logged cannot be
+changed: an entry that turns out to be wrong is deleted and logged again, which keeps
+every row's `at` and `byUid` the record of what was logged rather than what somebody
+later wished had been. The one exception is what arrives after a call: its
+**recording and transcript**, which a [`PATCH`](#attach-a-recording) attaches to a
+call or a meeting.
 
 Scopes and the site rule are shared with every CRM resource — see
 [companies](companies.md#scopes-and-sites).
@@ -41,6 +43,8 @@ Scopes and the site rule are shared with every CRM resource — see
   "outcome": "Interested",
   "durationMinutes": 25,
   "direction": "outbound",
+  "mediaIds": ["m_4e1a"],
+  "transcript": "Thanks for making the time…",
   "siteId": "site_a1b2c3",
   "created": "2026-09-05T18:23:23.941Z",
   "updated": "2026-09-05T18:23:23.941Z"
@@ -60,6 +64,8 @@ Scopes and the site rule are shared with every CRM resource — see
 | `outcome` | string \| null | A short label, 120 characters. |
 | `durationMinutes` | integer \| null | A whole number, `0` or more. |
 | `direction` | string \| null | Which way it went: a `call` takes `outbound`, `inbound` or `internal` (Salesforce's Call Type); an `email` and every message kind (`text`, `whatsapp`, `messenger`, `instagram`, `linkedin`) take `outbound` or `inbound`. Any other kind takes none. Optional. |
+| `mediaIds` | string[] | A `call`'s or a `meeting`'s recordings: [media library](media.md) files by id, at most 5. `[]` when none. Any other kind takes none. |
+| `transcript` | string \| null | What was said, as text, for a `call` or a `meeting`; at most 200,000 characters. Searched with the body in the console. |
 | `siteId` | string | The site the activity was logged from. **Read-only.** |
 | `created` / `updated` | string \| null | ISO 8601. |
 
@@ -110,6 +116,28 @@ curl -X POST "https://app.aglyn.com/api/v1/activities" \
 
 Returns **`201`**, or **`200`** with the original when an `Idempotency-Key` replays.
 
+### Attach a recording {#attach-a-recording}
+
+`PATCH /v1/activities/{activityId}` — scope `crm:write`. Attaches a call's or a
+meeting's recording and transcript after it was logged. It takes `mediaIds` and
+`transcript` and nothing else; every other field of the activity stays as it was
+logged. `null` or `[]` removes a field. Accepts an
+[`Idempotency-Key`](../conventions.md#idempotency).
+
+Upload the audio first with [`POST /v1/media`](media.md), with `private: true`,
+`purpose: "callRecording"` and `rightsConfirmed: true`, which records that everyone on
+the call knew it was being recorded. A request body carries at most about 3 MB of
+file, so a longer recording is uploaded in the console, from the activity itself.
+
+```bash
+curl -X PATCH "https://app.aglyn.com/api/v1/activities/a_8f21" \
+  -H "Authorization: Bearer aglyn_sk_…" \
+  -H "Content-Type: application/json" \
+  -d '{"mediaIds":["m_4e1a"],"transcript":"Thanks for making the time…"}'
+```
+
+Returns the activity.
+
 ### Delete an activity
 
 `DELETE /v1/activities/{activityId}` — scope `crm:write`. Accepts an
@@ -123,10 +151,10 @@ Returns **`201`**, or **`200`** with the original when an `Idempotency-Key` repl
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing `body`, a missing `consentSiteId` where the organization keeps its sites apart, no `contactId`, `companyId` or `dealId` at all (`fields.contactId` explains), a `kind` outside its list, an `at` that is not an ISO 8601 instant, a `byUid` who is not a member, a reference that does not exist, a `durationMinutes` that is not a whole number `0` or more, or a `direction` the kind does not take. On the list, a `?kind=` outside the list or a malformed `?updatedAfter=`. |
+| `400` | `bad_request` | `code: "validation_failed"` — a missing `body`, a missing `consentSiteId` where the organization keeps its sites apart, no `contactId`, `companyId` or `dealId` at all (`fields.contactId` explains), a `kind` outside its list, an `at` that is not an ISO 8601 instant, a `byUid` who is not a member, a reference that does not exist, a `durationMinutes` that is not a whole number `0` or more, a `direction` the kind does not take, or `mediaIds` or `transcript` on a kind other than `call` or `meeting`. On a `PATCH`, any field other than `mediaIds` and `transcript`. On the list, a `?kind=` outside the list or a malformed `?updatedAfter=`. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `404` | `not_found` | `"No such activity"`. |
-| `405` | `method_not_allowed` | `Allow`: `GET, POST` on `/v1/activities`, `GET, DELETE` on one activity — a `PATCH` is refused here rather than with a `404` that would read as "no such activity". |
+| `405` | `method_not_allowed` | `Allow`: `GET, POST` on `/v1/activities`, `GET, PATCH, DELETE` on one activity. |
 | `409` | `conflict` | `code: "idempotency_in_progress"`. `code: "activity_log_full"` — the record named already carries 5,000 activities, the most one record can hold; the key is given back. |
 
 See [Conventions → Errors](../conventions.md#errors) for the shared envelope.

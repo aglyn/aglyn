@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import {
+  CALL_RECORDING_CONSENT_STATEMENT,
+  type MediaUploadPurpose,
+} from '@aglyn/aglyn/app-utils/media-picker-context'
 import { isAudioUploadType } from './media-upload-limits'
 
 /**
@@ -46,12 +50,29 @@ export const AUDIO_RIGHTS_REQUIRED_MESSAGE =
 /** The request field that carries the answer. */
 export const AUDIO_RIGHTS_FIELD = 'rightsConfirmed'
 
+/**
+ * The request field naming what an upload is for (`callRecording`), which
+ * decides the sentence its uploader confirmed. Absent, audio is music.
+ */
+export const MEDIA_UPLOAD_PURPOSE_FIELD = 'purpose'
+
+/** What a person is told when a call recording arrives without the consent answer. */
+export const CALL_RECORDING_CONSENT_REQUIRED_MESSAGE =
+  'Confirm that everyone on the call knew it was being recorded before uploading it.'
+
+/** A request's purpose, when it names one this platform knows. */
+export function mediaUploadPurpose(value: unknown): MediaUploadPurpose | null {
+  return value === 'callRecording' ? 'callRecording' : null
+}
+
 /** The confirmation as the asset document stores it. */
 export interface MediaRightsConfirmation {
   /** Who confirmed: a uid, or `api:<key id>` from the REST API. */
   uid: string
   atMs: number
   statement: string
+  /** What the audio is for, when it is not music — see {@link mediaUploadPurpose}. */
+  purpose?: MediaUploadPurpose
 }
 
 /** Why an audio upload is refused, as a route answers it. */
@@ -82,14 +103,24 @@ export function audioRightsVerdict(input: {
   confirmed: unknown
   uid: string
   nowMs?: number
+  /**
+   * The request's `purpose`: a call recording is confirmed against
+   * {@link CALL_RECORDING_CONSENT_STATEMENT} rather than the music sentence,
+   * and the stored answer names which.
+   */
+  purpose?: unknown
 }): AudioRightsVerdict {
   if (!isAudioUploadType(input.contentType)) return { fields: {}, refusal: null }
+  const purpose = mediaUploadPurpose(input.purpose)
   if (input.confirmed !== true || !input.uid) {
     return {
       fields: {},
       refusal: {
         status: 400,
-        message: AUDIO_RIGHTS_REQUIRED_MESSAGE,
+        message:
+          purpose === 'callRecording'
+            ? CALL_RECORDING_CONSENT_REQUIRED_MESSAGE
+            : AUDIO_RIGHTS_REQUIRED_MESSAGE,
         code: AUDIO_RIGHTS_REQUIRED_CODE,
       },
     }
@@ -100,7 +131,11 @@ export function audioRightsVerdict(input: {
       rightsConfirmation: {
         uid: input.uid,
         atMs: input.nowMs ?? Date.now(),
-        statement: AUDIO_RIGHTS_STATEMENT,
+        statement:
+          purpose === 'callRecording'
+            ? CALL_RECORDING_CONSENT_STATEMENT
+            : AUDIO_RIGHTS_STATEMENT,
+        ...(purpose ? { purpose } : {}),
       },
     },
   }

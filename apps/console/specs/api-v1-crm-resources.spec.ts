@@ -1460,6 +1460,30 @@ describe('/v1/activities', () => {
     expect(childPaths(ACTIVITIES)).toHaveLength(CRM_ACTIVITIES_PER_RECORD_CEILING + 1)
   })
 
+  it('takes a recording and a transcript only on a call or a meeting', async () => {
+    const note = await call('POST', 'activities', {
+      kind: 'note',
+      body: 'Prefers mornings',
+      contactId: 'c-1',
+      mediaIds: ['m-1'],
+      consentSiteId: 'host-1',
+    })
+    expect(note.status).toBe(400)
+    expect((await json(note)).error.fields.mediaIds).toMatch(/call or a meeting/)
+
+    const call1 = await json(
+      await call('POST', 'activities', {
+        kind: 'call',
+        body: 'Discovery call',
+        contactId: 'c-1',
+        mediaIds: ['m-1'],
+        transcript: 'Thanks for the time.',
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(call1).toMatchObject({ mediaIds: ['m-1'], transcript: 'Thanks for the time.' })
+  })
+
   it('must hang off something, defaults at and byUid, and is write-once', async () => {
     const orphan = await call('POST', 'activities', { body: 'Called', consentSiteId: 'host-1' })
     expect(orphan.status).toBe(400)
@@ -1497,9 +1521,27 @@ describe('/v1/activities', () => {
       tokensFor('host-1'),
     )
 
+    // What was logged stays as it was logged: a PATCH takes only what
+    // arrives after the call — its recording and its transcript.
     const edit = await call('PATCH', `activities/${activity.id}`, { body: 'Edited' })
-    expect(edit.status).toBe(405)
-    expect(edit.headers.get('Allow')).toBe('GET, DELETE')
+    expect(edit.status).toBe(400)
+    expect((await json(edit)).error.fields).toHaveProperty('body')
+    expect(mockDocs.get(`${ACTIVITIES}/${activity.id}`)!.body).toBe('Called about the order')
+
+    const attached = await call('PATCH', `activities/${activity.id}`, {
+      mediaIds: ['m-1', 'm-1', ' m-2 '],
+      transcript: '  Hello.\r\nHi.  ',
+    })
+    expect(attached.status).toBe(200)
+    expect(await json(attached)).toMatchObject({
+      body: 'Called about the order',
+      mediaIds: ['m-1', 'm-2'],
+      transcript: 'Hello.\nHi.',
+    })
+    const removed = await json(
+      await call('PATCH', `activities/${activity.id}`, { mediaIds: null, transcript: null }),
+    )
+    expect(removed).toMatchObject({ mediaIds: [], transcript: null })
 
     const first = await call('DELETE', `activities/${activity.id}`, undefined, 'act-del')
     expect(first.status).toBe(200)

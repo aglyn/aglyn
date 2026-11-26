@@ -110,7 +110,7 @@ import {
   VIDEO_UPLOADS_PAUSED_CODE,
   VIDEO_UPLOADS_PAUSED_MESSAGE,
 } from './media-upload-limits'
-import { AUDIO_RIGHTS_FIELD, audioRightsVerdict } from './media-audio-rights'
+import { AUDIO_RIGHTS_FIELD, audioRightsVerdict, MEDIA_UPLOAD_PURPOSE_FIELD } from './media-audio-rights'
 import {
   isSvgUploadType,
   sanitizeSvgBuffer,
@@ -918,6 +918,7 @@ async function createMedia(
   const rights = audioRightsVerdict({
     contentType,
     confirmed: body[AUDIO_RIGHTS_FIELD],
+    purpose: body[MEDIA_UPLOAD_PURPOSE_FIELD],
     uid: `api:${ctx.keyId}`,
   })
   if (rights.refusal) {

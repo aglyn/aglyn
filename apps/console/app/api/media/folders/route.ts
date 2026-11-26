@@ -19,6 +19,7 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   isSiblingNameTaken,
   normalizeFolderName,
+  resolveMediaFolderPath,
 } from '@aglyn/aglyn/server'
 import {
   currentDownloadUrlForObject,
@@ -104,6 +105,10 @@ class FolderTooLargeError extends Error {
  * - `create-folder` {name, parentId|null, forHostId?} — the library's New
  *   folder, with its name, depth and sibling checks and the org's default
  *   sharing (AGL-3668, the native apps)
+ * - `ensure-folder-path` {path: string[], forHostId?} — the folder at that
+ *   path of names from the root, each level created when missing, for an
+ *   upload a plugin files without opening the library (a CRM call recording
+ *   lands in CRM / Calls)
  * - `update-details` {mediaId, fileName?, alt?, description?, tags?} — the
  *   details drawer's save, with the library's filter and search keys
  *   re-derived from the document it leaves (AGL-3668, the native apps)
@@ -767,6 +772,41 @@ async function handler(request: Request): Promise<Response> {
         } as Parameters<typeof newMediaFolderDoc>[0]),
       )
       return Response.json({ ok: true, folderId: ref.id }, { status: 200 })
+    }
+
+    if (action === 'ensure-folder-path') {
+      const rawPath: unknown[] = Array.isArray(body?.path) ? body.path : []
+      const path = rawPath.map((name) => normalizeFolderName(String(name ?? '')))
+      if (!path.length || path.length > MEDIA_FOLDER_MAX_DEPTH || path.some((name) => !name)) {
+        return Response.json({ error: 'Name each folder (up to 60 characters)' }, { status: 400 })
+      }
+      const existing = await foldersRef.limit(500).get()
+      const folders = existing.docs.map((docSnapshot) => ({ $id: docSnapshot.id, ...docSnapshot.data() })) as any[]
+      const resolved = resolveMediaFolderPath(path, folders)
+      let parentId = resolved.parentId
+      const forHostId = typeof body?.forHostId === 'string' && body.forHostId ? body.forHostId : null
+      // Each missing level in turn, under the one before it. Two uploads
+      // racing here can each make the folder; the second is a duplicate a
+      // person can merge, never a lost file.
+      for (const name of resolved.missing) {
+        const ref = foldersRef.doc(createResourceUid())
+        await ref.set(
+          newMediaFolderDoc({
+            name,
+            parentId,
+            createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+            visibleTo:
+              scope.collection === 'orgs'
+                ? defaultScopeForNewResource({
+                    defaultResourceScope: defaultMediaScopeOf(scope.billing as Parameters<typeof defaultMediaScopeOf>[0]),
+                    hostId: forHostId,
+                  })
+                : undefined,
+          } as Parameters<typeof newMediaFolderDoc>[0]),
+        )
+        parentId = ref.id
+      }
+      return Response.json({ ok: true, folderId: parentId }, { status: 200 })
     }
 
     if (action === 'update-details') {

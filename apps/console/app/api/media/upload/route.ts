@@ -66,6 +66,7 @@ import {
 } from '../../../../utils/media-upload-limits'
 import {
   AUDIO_RIGHTS_FIELD,
+  MEDIA_UPLOAD_PURPOSE_FIELD,
   audioRightsRefusal,
   audioRightsVerdict,
 } from '../../../../utils/media-audio-rights'
@@ -188,6 +189,7 @@ async function handler(request: Request): Promise<Response> {
     const rights = audioRightsVerdict({
       contentType,
       confirmed: body?.[AUDIO_RIGHTS_FIELD],
+      purpose: body?.[MEDIA_UPLOAD_PURPOSE_FIELD],
       uid: decoded.uid,
     })
     if (rights.refusal) return audioRightsRefusal(rights.refusal)
