@@ -38,11 +38,16 @@ content on the marketing site and is written separately.
 - **commerce:** checkout charges in the shopper's currency ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
 - **commerce:** multi-currency core: rates, conversion, rounding, fixed prices ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
 
+- **native:** the Pages table names each visited product, post and collection ([AGL-4253](https://linear.app/aglyn/issue/AGL-4253))
+
 ### Fixed
 
 - **events:** theme the category chip text, record the element icon tints ([AGL-4252](https://linear.app/aglyn/issue/AGL-4252))
 - **commerce:** currency selector icon uses a theme colour; docs spell gray ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
 - **commerce:** shopper currency asks the converter whether a currency can be priced ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+
+- **native:** the Pages table fits a phone, and a page row opens on iPhone ([AGL-4253](https://linear.app/aglyn/issue/AGL-4253))
+- **analytics:** built-in pages are named, not filed as dead addresses ([AGL-4253](https://linear.app/aglyn/issue/AGL-4253))
 
 ### Performance
 
