@@ -108,7 +108,12 @@ const HostMedia: NextPageWithLayout<Record<string, never>> = () => {
               listing — folder rail, file query, thumbnails — and most visits
               to a site's media never look at it, so it costs nothing until
               its tab is opened. */}
-          {tab === 'site' ? <MediaLibraryComponent hostId={hostId} /> : null}
+          {tab === 'site' ? (
+            <MediaLibraryComponent
+              hostId={hostId}
+              libraryMove={hostOrgId ? { orgId: hostOrgId, hostId } : undefined}
+            />
+          ) : null}
           {/* `forHostId` narrows the shared library to what THIS site may
               render (AGL-1045) — the same rule the picker follows. Without
               it this tab would list every workspace asset the VIEWER can
@@ -116,7 +121,11 @@ const HostMedia: NextPageWithLayout<Record<string, never>> = () => {
               find the agency's internal artwork under a label promising the
               opposite. */}
           {tab === 'org' && hostOrgId ? (
-            <MediaLibraryComponent orgId={hostOrgId} forHostId={hostId} />
+            <MediaLibraryComponent
+              orgId={hostOrgId}
+              forHostId={hostId}
+              libraryMove={{ orgId: hostOrgId, hostId }}
+            />
           ) : null}
         </CardDisplay>
       </Container>
