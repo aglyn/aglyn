@@ -21,7 +21,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { formatOrderMoney } from '../model/buyer-notifications'
 import {
   amountMinorIn,
-  crossRate,
+  convertMinor,
   currenciesShareSign,
   formatShopperMoney,
   resolveShopperCurrency,
@@ -179,9 +179,10 @@ export function shopperCurrencyFrom(input: {
     chosen: input.chosen,
   })
   const entry = currencies.find((item) => item.code === code)
-  // A pair the rates do not cover prints in the store currency, as checkout
-  // would charge it.
-  if (!entry || (code !== base && crossRate(answer.rates ?? undefined, base, code) == null)) {
+  // A currency the store cannot price (no daily rate and no rate of the
+  // merchant's own) prints in the store currency, as checkout would charge
+  // it. Asked through the converter, so it follows however the model rates it.
+  if (!entry || (code !== base && convertMinor(100, base, entry, answer.rates ?? undefined) == null)) {
     return { code: base, base, currencies, entry: { code: base, rounding: 'none' } }
   }
   return { code, base, currencies, entry }
