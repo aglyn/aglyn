@@ -62,7 +62,6 @@ struct AnalyticsView: View {
   @Environment(ShellNavigation.self) private var navigation
   @State private var selection: AnalyticsSection?
   @State private var pushed: AnalyticsSection?
-  @State private var drill: AnalyticsPageDrill?
 
   private var hostID: String? { model.scopedSite(navigation)?.id }
 
@@ -77,8 +76,6 @@ struct AnalyticsView: View {
   }
 
   private let funnelsScreen = "funnels.list"
-  /// The store's product editor, by its id (the commerce plugin's `commerceProductScreen`); core names no plugin type.
-  private let productScreen = "commerce.product"
 
   private var glanceWidgets: [NativeWidget] { model.registry.widgets(for: .aglyn).filter { hostID != nil || !$0.requiresSite } }
 
@@ -129,7 +126,6 @@ struct AnalyticsView: View {
     .navigationTitle("Analytics")
     .aglynScreenTitle("Analytics")
     .refreshable { model.refresh() }
-    .onChange(of: selection) { drill = nil }
     .accessibilityIdentifier("analytics")
   }
 
@@ -140,28 +136,7 @@ struct AnalyticsView: View {
       case .traffic:
         scroll { SiteTrafficCard(reader: reader, api: model.api, hostID: hostID, detail: true, refresh: model.refreshToken) }
       case .pages:
-        if let drill {
-          scroll {
-            Button {
-              self.drill = nil
-            } label: {
-              Label("Pages", systemImage: "chevron.left")
-            }
-            .buttonStyle(.borderless)
-            .foregroundStyle(AglynColor.tint)
-            .accessibilityIdentifier("analytics-page-back")
-            Text(drill.path).font(AglynFont.title2).lineLimit(1).truncationMode(.middle)
-            PageTrafficCard(reader: reader, api: model.api, hostID: hostID, screenID: drill.screenID, refresh: model.refreshToken) {
-              openPlans()
-            }
-          }
-        } else {
-          scroll {
-            SitePagesTrafficCard(reader: reader, api: model.api, hostID: hostID, refresh: model.refreshToken, upgrade: openPlans) {
-              openPage($0)
-            }
-          }
-        }
+        AnalyticsPagesSection(reader: reader, hostID: hostID, openPlans: openPlans)
       case .funnels:
         if let context = model.context(for: navigation) {
           let widgets = model.registry.widgets(for: .aglyn, slot: hostAnalyticsSlot)
@@ -188,9 +163,57 @@ struct AnalyticsView: View {
     .background(AglynColor.paper)
   }
 
+  /// The plans, where the upgrade the card names is bought (the console's Upgrade goes to Billing).
+  private func openPlans() {
+    navigation.push(.screen("core.billing.plans", [:]))
+  }
+}
+
+/// The Pages section: the Pages card, or a page's own traffic in its place. It holds its own drill, so a phone's pushed
+/// section (a screen of its own) redraws when a row is picked.
+private struct AnalyticsPagesSection: View {
+  @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
+  let reader: FirestoreReader
+  let hostID: String
+  let openPlans: () -> Void
+  @State private var drill: AnalyticsPageDrill?
+
+  /// The store's product editor, by its id (the commerce plugin's `commerceProductScreen`); core names no plugin type.
+  private let productScreen = "commerce.product"
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: AglynSpace.three) {
+        if let drill {
+          Button {
+            self.drill = nil
+          } label: {
+            Label("Pages", systemImage: "chevron.left")
+          }
+          .buttonStyle(.borderless)
+          .foregroundStyle(AglynColor.tint)
+          .accessibilityIdentifier("analytics-page-back")
+          Text(drill.path).font(AglynFont.title2).lineLimit(1).truncationMode(.middle)
+          PageTrafficCard(reader: reader, api: model.api, hostID: hostID, screenID: drill.screenID, refresh: model.refreshToken) {
+            openPlans()
+          }
+        } else {
+          SitePagesTrafficCard(reader: reader, api: model.api, hostID: hostID, refresh: model.refreshToken, upgrade: openPlans) {
+            open($0)
+          }
+        }
+      }
+      .padding(.horizontal, AglynContentInsets.horizontal)
+      .padding(.vertical, AglynSpace.three)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .background(AglynColor.paper)
+  }
+
   /// What a Pages row names (AGL-4253): a page opens its own traffic, a product its editor (where the store is on), and
   /// anything else with a live address the live page, in the in-app browser.
-  private func openPage(_ label: SitePageLabel) {
+  private func open(_ label: SitePageLabel) {
     if let screenID = label.screenID {
       drill = AnalyticsPageDrill(screenID: screenID, path: label.title)
     } else if let productID = label.productID, model.registry.screen(productScreen) != nil {
@@ -198,10 +221,5 @@ struct AnalyticsView: View {
     } else if let url = label.liveURL {
       navigation.openWeb(AglynWebPage(url))
     }
-  }
-
-  /// The plans, where the upgrade the card names is bought (the console's Upgrade goes to Billing).
-  private func openPlans() {
-    navigation.push(.screen("core.billing.plans", [:]))
   }
 }

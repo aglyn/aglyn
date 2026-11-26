@@ -80,6 +80,8 @@ enum SiteAnalyticsMetrics {
   static let shareColumn = AglynSpace.of(7)
   static let deviceColumn = AglynSpace.of(12)
   static let referrerColumn = AglynSpace.of(17.5)
+  /// The narrowest Pages table that holds every column: the four fixed ones, the gaps and a readable name.
+  static let pagesFullRow = AglynSpace.of(77.5)
   static let summaryChart = AglynSpace.of(15)
   static let detailChart = AglynSpace.of(20)
   static let pageChart = AglynSpace.of(12)
@@ -534,6 +536,10 @@ public struct SitePagesTrafficCard: View {
   @State private var model = SitePagesTrafficModel()
   @State private var range = 14
   @State private var kind = "all"
+  /// The table's own width: a phone, or an iPad's detail column beside the sidebar and list, holds the name, views and
+  /// share; device and referrer come in where the full row fits.
+  @State private var width: CGFloat = .infinity
+  private var compact: Bool { width < SiteAnalyticsMetrics.pagesFullRow }
 
   /// Device and referrer of a row drawn from a template it shares, said once under the table.
   static let sharedTemplateNote =
@@ -617,8 +623,11 @@ public struct SitePagesTrafficCard: View {
         Divider()
         pageRow(row, sum: sum)
       }
-      Text(Self.sharedTemplateNote).font(AglynFont.caption).foregroundStyle(.secondary).padding(.top, AglynSpace.two)
+      if !compact {
+        Text(Self.sharedTemplateNote).font(AglynFont.caption).foregroundStyle(.secondary).padding(.top, AglynSpace.two)
+      }
     }
+    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
   }
 
   private func pageRow(_ row: SitePageRow, sum: Double) -> some View {
@@ -632,16 +641,18 @@ public struct SitePagesTrafficCard: View {
       HStack(spacing: AglynSpace.two) {
         VStack(alignment: .leading, spacing: 2) {
           Text(label.title).lineLimit(1).truncationMode(.tail)
-          Text(subtitle).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+          Text(subtitle).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         Text(analyticsCount(row.views)).monospacedDigit().frame(width: SiteAnalyticsMetrics.viewsColumn, alignment: .trailing)
         Text(sum > 0 ? "\(Int((row.views * 100 / sum + 0.5).rounded(.down)))%" : "--").monospacedDigit()
           .foregroundStyle(.secondary).frame(width: SiteAnalyticsMetrics.shareColumn, alignment: .trailing)
-        Text(perPage(measured, row.screen.map { topDevice($0).capitalized }))
-          .foregroundStyle(.secondary).lineLimit(1).frame(width: SiteAnalyticsMetrics.deviceColumn, alignment: .leading)
-        Text(perPage(measured, row.screen.map { referrerLabel(topReferrer($0)) })).lineLimit(1).foregroundStyle(.secondary)
-          .frame(width: SiteAnalyticsMetrics.referrerColumn, alignment: .leading)
+        if !compact {
+          Text(perPage(measured, row.screen.map { topDevice($0).capitalized }))
+            .foregroundStyle(.secondary).lineLimit(1).frame(width: SiteAnalyticsMetrics.deviceColumn, alignment: .leading)
+          Text(perPage(measured, row.screen.map { referrerLabel(topReferrer($0)) })).lineLimit(1).foregroundStyle(.secondary)
+            .frame(width: SiteAnalyticsMetrics.referrerColumn, alignment: .leading)
+        }
         Image(systemName: label.screenID != nil || label.productID != nil ? "chevron.right" : "arrow.up.right")
           .font(AglynFont.caption).foregroundStyle(.tertiary).opacity(opens ? 1 : 0).accessibilityHidden(true)
       }
@@ -666,8 +677,10 @@ public struct SitePagesTrafficCard: View {
       Text("Page").frame(maxWidth: .infinity, alignment: .leading)
       Text("Views").frame(width: SiteAnalyticsMetrics.viewsColumn, alignment: .trailing)
       Text("Share").frame(width: SiteAnalyticsMetrics.shareColumn, alignment: .trailing)
-      Text("Top device").frame(width: SiteAnalyticsMetrics.deviceColumn, alignment: .leading)
-      Text("Top referrer").frame(width: SiteAnalyticsMetrics.referrerColumn, alignment: .leading)
+      if !compact {
+        Text("Top device").frame(width: SiteAnalyticsMetrics.deviceColumn, alignment: .leading)
+        Text("Top referrer").frame(width: SiteAnalyticsMetrics.referrerColumn, alignment: .leading)
+      }
       Image(systemName: "chevron.right").font(AglynFont.caption).hidden()
     }
     .font(AglynFont.caption.weight(.semibold))

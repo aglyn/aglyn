@@ -2,6 +2,7 @@ package com.aglyn.site.analytics
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -25,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.ActivityEntryFields
 import com.aglyn.contracts.DeviceSplitEntry
 import com.aglyn.contracts.ScreenTrafficDay
@@ -499,36 +501,44 @@ private fun PagesTable(loaded: SitePagesLoad, kind: String, onKind: (String) -> 
   val groups = sitePageGroups(loaded.rows)
   val shown = if (kind == ALL_KINDS) loaded.rows else loaded.rows.filter { it.label.group.id == kind }
   val sum = loaded.rows.sumOf { it.views }
-  Column {
-    ChoiceChipRow(
-      listOf(ChipOption(ALL_KINDS, "All · ${loaded.rows.size}")) +
-        groups.map { ChipOption(it.group.id, "${it.group.label} · ${it.count} · ${analyticsCount(it.views)} views") },
-      kind,
-      onKind,
-      Modifier.fillMaxWidth().padding(bottom = space(1f)).testTag("analytics-pages-kinds"),
-    )
-    PagesHeader()
-    shown.forEach { row ->
-      HorizontalDivider()
-      PageRow(row, sum, showKind = kind == ALL_KINDS, screensFailed = loaded.screensFailed) { open(row.label) }
+  // A phone's width holds the name, views and share; device and referrer need a tablet's or a desktop's.
+  BoxWithConstraints {
+    val compact = maxWidth < 600.dp
+    Column {
+      ChoiceChipRow(
+        listOf(ChipOption(ALL_KINDS, "All · ${loaded.rows.size}")) +
+          groups.map { ChipOption(it.group.id, "${it.group.label} · ${it.count} · ${analyticsCount(it.views)} views") },
+        kind,
+        onKind,
+        Modifier.fillMaxWidth().padding(bottom = space(1f)).testTag("analytics-pages-kinds"),
+        // Every kind in view, as the console's chips wrap: a scrolled-off kind is a filter nobody finds.
+        wrap = true,
+      )
+      PagesHeader(compact)
+      shown.forEach { row ->
+        HorizontalDivider()
+        PageRow(row, sum, showKind = kind == ALL_KINDS, screensFailed = loaded.screensFailed, compact = compact) { open(row.label) }
+      }
+      if (!compact) {
+        Text(
+          PAGES_SHARED_TEMPLATE_NOTE,
+          Modifier.padding(top = space(2f)),
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
     }
-    Text(
-      PAGES_SHARED_TEMPLATE_NOTE,
-      Modifier.padding(top = space(2f)),
-      style = MaterialTheme.typography.bodySmall,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
   }
 }
 
 private val PAGE_COLUMNS = listOf("Page" to 3f, "Views" to 1f, "Share" to 1f, "Top device" to 1.4f, "Top referrer" to 2f)
 
 @Composable
-private fun PagesHeader() {
+private fun PagesHeader(compact: Boolean) {
   Row(Modifier.fillMaxWidth().padding(bottom = space(1f))) {
-    PAGE_COLUMNS.forEachIndexed { index, (label, weight) ->
+    PAGE_COLUMNS.take(if (compact) 3 else PAGE_COLUMNS.size).forEachIndexed { index, (label, weight) ->
       Text(
-        label, Modifier.weight(weight),
+        label, Modifier.weight(weight).then(if (index == 3) Modifier.padding(start = space(2f)) else Modifier),
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = if (index == 1 || index == 2) TextAlign.End else TextAlign.Start,
@@ -545,7 +555,7 @@ private fun perPage(label: SitePageLabel, screensFailed: Boolean, value: String?
 }
 
 @Composable
-private fun PageRow(row: SitePageRow, sum: Double, showKind: Boolean, screensFailed: Boolean, onClick: () -> Unit) {
+private fun PageRow(row: SitePageRow, sum: Double, showKind: Boolean, screensFailed: Boolean, compact: Boolean, onClick: () -> Unit) {
   val label = row.label
   val opens = label.screenId != null || label.productId != null || label.liveUrl != null
   Row(
@@ -563,11 +573,13 @@ private fun PageRow(row: SitePageRow, sum: Double, showKind: Boolean, screensFai
     }
     Text(analyticsCount(row.views), Modifier.weight(1f), style = style, textAlign = TextAlign.End)
     Text(if (sum > 0) "${kotlin.math.floor(row.views * 100.0 / sum + 0.5).toLong()}%" else "--", Modifier.weight(1f), style = style, color = muted, textAlign = TextAlign.End)
-    Text(
-      perPage(label, screensFailed, row.screen?.let { topDevice(it).replaceFirstChar { c -> c.uppercaseChar() } }),
-      Modifier.weight(1.4f).padding(start = space(2f)), maxLines = 1, overflow = TextOverflow.Ellipsis, style = style, color = muted,
-    )
-    Text(perPage(label, screensFailed, row.screen?.let { referrerLabel(topReferrer(it)) }), Modifier.weight(2f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = style, color = muted)
+    if (!compact) {
+      Text(
+        perPage(label, screensFailed, row.screen?.let { topDevice(it).replaceFirstChar { c -> c.uppercaseChar() } }),
+        Modifier.weight(1.4f).padding(start = space(2f)), maxLines = 1, overflow = TextOverflow.Ellipsis, style = style, color = muted,
+      )
+      Text(perPage(label, screensFailed, row.screen?.let { referrerLabel(topReferrer(it)) }), Modifier.weight(2f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = style, color = muted)
+    }
   }
 }
 
