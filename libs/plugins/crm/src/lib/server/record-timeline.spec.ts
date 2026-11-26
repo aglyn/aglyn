@@ -334,6 +334,32 @@ describe('the CRM on the record-timeline seam (AGL-2981)', () => {
     expect((first as { id: string }).id).toMatch(/^plg_[0-9a-f]{28}$/)
   })
 
+  it("keeps a call's recording and transcript, and drops them from a kind that carries none (AGL-4251)", async () => {
+    const call = await writer.logActivity({
+      ...INBOUND,
+      kind: 'call',
+      email: null,
+      body: 'Voicemail',
+      dedupeKey: 'phone-call:CA1',
+      mediaIds: ['rec1', 'rec1', ''],
+      transcript: '  Call me back\r\n',
+    })
+    const note = await writer.logActivity({
+      ...INBOUND,
+      kind: 'note',
+      email: null,
+      body: 'Note',
+      dedupeKey: 'note:1',
+      mediaIds: ['rec2'],
+      transcript: 'nope',
+    })
+    const row = (id: string) => [...mockDocs.entries()].find(([path]) => path.endsWith(`/${id}`))?.[1]
+    expect(row((call as { id: string }).id)).toMatchObject({ kind: 'call', mediaIds: ['rec1'], transcript: 'Call me back' })
+    const noteRow = row((note as { id: string }).id) as Record<string, unknown>
+    expect(noteRow['mediaIds']).toBeUndefined()
+    expect(noteRow['transcript']).toBeUndefined()
+  })
+
   it('refuses before writing: a Free workspace, a full log, no record, no key', async () => {
     seedOrg({ plan: 'free' })
     expect(await writer.logActivity(INBOUND)).toMatchObject({ ok: false, status: 403 })

@@ -51,6 +51,11 @@ import {
   firebaseAdmin,
   readLeadForHost,
 } from '@aglyn/tenant-data-admin'
+import {
+  activityKindTakesRecording,
+  normalizeCrmActivityMediaIds,
+  normalizeCrmActivityTranscript,
+} from '@aglyn/aglyn/app-utils/crm'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { createHash } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -356,12 +361,19 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
         if (!key) return refuse(400, 'An entry that is not an email names its own key.')
         ref = crmActivityRef(firestore, orgId, keyedId(request.sourcePluginId, key))
         const byName = String(request.byName ?? '').trim()
+        // A recording and a transcript ride a call or a meeting only (AGL-4251),
+        // cleaned exactly as a member's own attachment is (AGL-4249).
+        const takesRecording = activityKindTakesRecording(request.kind)
+        const mediaIds = takesRecording ? normalizeCrmActivityMediaIds(request.mediaIds ?? []) : []
+        const transcript = takesRecording ? normalizeCrmActivityTranscript(request.transcript ?? '') : ''
         activity = {
           kind: request.kind,
           body: String(request.body ?? '').slice(0, NOTE_MAX),
           atMs: request.atMs,
           byUid: String(request.byUid ?? ''),
           ...(byName ? { byName } : {}),
+          ...(mediaIds.length ? { mediaIds } : {}),
+          ...(transcript ? { transcript } : {}),
           ...link,
           hostId: request.hostId,
           visibleTo,

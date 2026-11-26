@@ -153,6 +153,14 @@ export interface PluginRecordActivityRequest extends PluginRecordEntryContext {
   email?: PluginRecordEmail | null
   /** Required for every kind but `email`: the caller's id for this entry. */
   dedupeKey?: string | null
+  /**
+   * A call's or a meeting's recordings, as org media library ids (AGL-4251),
+   * and its transcript — the same two fields a member attaches by hand
+   * (AGL-4249). Read only for a kind that carries a recording; the owner
+   * cleans and caps both, and ignores them on any other kind.
+   */
+  mediaIds?: readonly string[] | null
+  transcript?: string | null
 }
 
 /** What a task is, in the record system's own words. */
