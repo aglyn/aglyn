@@ -311,7 +311,7 @@ export function EventCategoriesCard(props: {
               label="Color"
               type="color"
               size="small"
-              value={draft?.color ?? '#1E88E5'}
+              value={draft?.color ?? eventCategoryDefaultColor(0)}
               onChange={(event) =>
                 setDraft((prev) =>
                   prev ? { ...prev, color: event.target.value } : prev,
@@ -373,7 +373,7 @@ export function EventCategoryPicker(props: {
                 on
                   ? {
                       bgcolor: category.color,
-                      color: '#fff',
+                      color: (theme) => theme.palette.getContrastText(category.color),
                       '&:hover': { bgcolor: category.color },
                     }
                   : { borderColor: category.color }
