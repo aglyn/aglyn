@@ -287,17 +287,20 @@ export interface MediaLibraryUse {
   mediaId: string
   /** The site the use is on, or '' for the organization's own records. */
   hostId: string
-  /** `screens`, `products`, `org`, `crm`, … */
+  /** `screens`, `products`, `org` (workspace settings), a record's label … */
   area: string
   /** A name a person knows it by. */
   name: string
 }
 
+/** The area of a use on the workspace's own settings document. */
+export const WORKSPACE_SETTINGS_AREA = 'org'
+
 /**
  * Why a file may not go from the organization library to one site's library,
- * or `null` when it may: another site uses it, or the organization's own
- * records do (its settings, the CRM). A site library is one site's, so any of
- * those uses would break.
+ * or `null` when it may: another site uses it, the workspace's own settings
+ * (its logo) do, or a workspace record holds it (a CRM contact's files). A
+ * site library is one site's, so any of those uses would break.
  */
 export function orgToSiteRefusal(
   uses: readonly MediaLibraryUse[],
@@ -305,10 +308,13 @@ export function orgToSiteRefusal(
   siteNames: Readonly<Record<string, string>> = {},
 ): string | null {
   const otherSites = new Set<string>()
-  const orgAreas = new Set<string>()
+  const records: string[] = []
+  let settings = false
   for (const use of uses) {
     if (use.hostId && use.hostId !== hostId) otherSites.add(use.hostId)
-    if (!use.hostId) orgAreas.add(use.area)
+    if (use.hostId) continue
+    if (use.area === WORKSPACE_SETTINGS_AREA) settings = true
+    else if (!records.includes(`${use.area} "${use.name}"`)) records.push(`${use.area} "${use.name}"`)
   }
   const parts: string[] = []
   if (otherSites.size) {
@@ -317,9 +323,11 @@ export function orgToSiteRefusal(
       `${names.length === 1 ? 'another site uses it' : 'other sites use it'} (${names.join(', ')})`,
     )
   }
-  if (orgAreas.has('crm')) parts.push('the CRM uses it')
-  if ([...orgAreas].some((area) => area !== 'crm')) {
-    parts.push('the workspace uses it (its logo or settings)')
+  if (settings) parts.push('the workspace uses it (its logo or settings)')
+  if (records.length) {
+    const shown = records.slice(0, 2).join(', ')
+    const more = records.length > 2 ? ` and ${records.length - 2} more` : ''
+    parts.push(`${shown}${more} ${records.length === 1 ? 'holds' : 'hold'} it`)
   }
   return parts.length ? `Stays in the organization library: ${parts.join(' and ')}` : null
 }

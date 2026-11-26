@@ -138,17 +138,17 @@ describe('orgToSiteRefusal', () => {
     ).toBeNull()
   })
 
-  it('names another site and the CRM', () => {
+  it('names another site and a workspace record that holds the file', () => {
     expect(
       orgToSiteRefusal(
         [
           { mediaId: 'P', hostId: 'HOST2', area: 'screens', name: 'Home' },
-          { mediaId: 'P', hostId: '', area: 'crm', name: 'Billy' },
+          { mediaId: 'P', hostId: '', area: 'CRM contact', name: 'Billy' },
         ],
         'HOST1',
         { HOST2: 'Blog' },
       ),
-    ).toBe('Stays in the organization library: another site uses it (Blog) and the CRM uses it')
+    ).toBe('Stays in the organization library: another site uses it (Blog) and CRM contact "Billy" holds it')
   })
 
   it('names the workspace settings', () => {

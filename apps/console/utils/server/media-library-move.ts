@@ -24,6 +24,7 @@ import {
   pluginHostCollectionsScannedGenerically,
 } from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
 import {
+  WORKSPACE_SETTINGS_AREA,
   mediaIdsUsedBy,
   mediaMovePatch,
   type MediaLibraryMove,
@@ -63,9 +64,6 @@ export const MOVE_CORPUS_READ_LIMIT = 40_000
 /** Page size for the walk. */
 const PAGE = 300
 
-/** Fields on a CRM record that hold library files by bare id. */
-const CRM_COLLECTIONS = ['contacts', 'companies', 'deals', 'crmActivities'] as const
-
 /** One stored document that uses at least one of the files being moved. */
 export interface MediaUseHit {
   ref: FirebaseFirestore.DocumentReference
@@ -74,7 +72,7 @@ export interface MediaUseHit {
   area: string
   name: string
   mediaIds: string[]
-  /** CRM rows hold bare ids, which do not change in a move. */
+  /** A record holding the file by bare id, which a move does not change. */
   rewritable: boolean
 }
 
@@ -206,7 +204,7 @@ export async function walkMoveCorpus(options: {
     const orgRef = firestore.collection('orgs').doc(orgId)
     const org = await orgRef.get()
     spend(1)
-    if (org.exists) consider(org, '', 'org', 'Workspace settings')
+    if (org.exists) consider(org, '', WORKSPACE_SETTINGS_AREA, 'Workspace settings')
     for (const declared of listPluginOrgCollections()) {
       if ((declared.mediaScan ?? 'generic') !== 'generic' || !complete) continue
       for await (const docs of pages(orgRef.collection(declared.name))) {
@@ -217,23 +215,25 @@ export async function walkMoveCorpus(options: {
         }
       }
     }
-    // CRM records hold library files by bare id (`mediaIds`), which no
-    // address rewrite touches. They can only be found by id, and a file one
-    // of them holds has to stay where the CRM reads it from.
-    for (let index = 0; complete && index < options.mediaIds.length; index += 30) {
-      const chunk = options.mediaIds.slice(index, index + 30)
-      for (const collectionName of CRM_COLLECTIONS) {
+    // Some plugins attach library files to their records by bare id (a
+    // declaration's `mediaIdsField`), which no address rewrite touches. They
+    // can only be found by id, and a file one of them holds has to stay where
+    // the plugin reads it from.
+    for (const declared of listPluginOrgCollections()) {
+      if (!declared.mediaIdsField) continue
+      for (let index = 0; complete && index < options.mediaIds.length; index += 30) {
+        const chunk = options.mediaIds.slice(index, index + 30)
         const page = await orgRef
-          .collection(collectionName)
-          .where('mediaIds', 'array-contains-any', chunk)
+          .collection(declared.name)
+          .where(declared.mediaIdsField, 'array-contains-any', chunk)
           .get()
         if (!spend(page.size)) break
         for (const document of page.docs) {
-          const held = (document.get('mediaIds') as unknown[]) ?? []
+          const held = (document.get(declared.mediaIdsField) as unknown[]) ?? []
           hits.push({
             ref: document.ref,
             hostId: '',
-            area: 'crm',
+            area: declared.label ?? declared.name,
             name: nameOf(document),
             mediaIds: chunk.filter((id) => held.includes(id)),
             rewritable: false,

@@ -127,7 +127,7 @@ describeEmulated('moving files between libraries (emulator)', () => {
     expect(refusal('PHOTO')).toBeNull()
     expect(refusal('CARD')).toBeNull()
     expect(refusal('SHARED')).toMatch(/another site uses it/)
-    expect(refusal('CRMFILE')).toMatch(/the CRM uses it/)
+    expect(refusal('CRMFILE')).toMatch(/CRM contact "Billy" holds it/)
     expect(refusal('LOGO')).toMatch(/the workspace uses it/)
   })
 

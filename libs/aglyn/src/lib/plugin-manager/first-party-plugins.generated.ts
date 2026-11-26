@@ -1827,6 +1827,38 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
  */
 export const PLUGIN_ORG_COLLECTIONS_DECLARED: readonly ResolvedPluginOrgCollection[] = [
   {
+    "pluginId": "crm",
+    "name": "contacts",
+    "label": "CRM contact",
+    "mediaScan": "none",
+    "mediaScanReason": "A CRM record: names, contact details, notes and the ids of files attached to it (mediaIds). Attachments are held by bare media id, which the address match cannot see, so the library move reads them through mediaIdsField instead; scanning the records would read every contact in the workspace on each check for a field this declaration already names.",
+    "mediaIdsField": "mediaIds"
+  },
+  {
+    "pluginId": "crm",
+    "name": "companies",
+    "label": "CRM company",
+    "mediaScan": "none",
+    "mediaScanReason": "A CRM record: names, contact details, notes and the ids of files attached to it (mediaIds). Attachments are held by bare media id, which the address match cannot see, so the library move reads them through mediaIdsField instead; scanning the records would read every contact in the workspace on each check for a field this declaration already names.",
+    "mediaIdsField": "mediaIds"
+  },
+  {
+    "pluginId": "crm",
+    "name": "deals",
+    "label": "CRM deal",
+    "mediaScan": "none",
+    "mediaScanReason": "A CRM record: names, contact details, notes and the ids of files attached to it (mediaIds). Attachments are held by bare media id, which the address match cannot see, so the library move reads them through mediaIdsField instead; scanning the records would read every contact in the workspace on each check for a field this declaration already names.",
+    "mediaIdsField": "mediaIds"
+  },
+  {
+    "pluginId": "crm",
+    "name": "crmActivities",
+    "label": "CRM activity",
+    "mediaScan": "none",
+    "mediaScanReason": "A CRM record: names, contact details, notes and the ids of files attached to it (mediaIds). Attachments are held by bare media id, which the address match cannot see, so the library move reads them through mediaIdsField instead; scanning the records would read every contact in the workspace on each check for a field this declaration already names.",
+    "mediaIdsField": "mediaIds"
+  },
+  {
     "pluginId": "marketing",
     "name": "campaigns",
     "routeSlug": "marketing",
