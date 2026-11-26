@@ -3010,6 +3010,12 @@
       }
     },
     {
+      "description": "A business number your team texts and takes calls on.",
+      "id": "business-phone",
+      "label": "Phone",
+      "releaseFlag": "release_phone"
+    },
+    {
       "alwaysOnForWorkspace": true,
       "description": "Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, for visitors who allowed advertising.",
       "id": "ad-conversions",
@@ -10597,6 +10603,7 @@
     "ad-conversions": "console-only",
     "ai": "console-only",
     "bookings": "elements",
+    "business-phone": "console-only",
     "commerce": "elements",
     "couriers": "console-only",
     "crm": "console-only",

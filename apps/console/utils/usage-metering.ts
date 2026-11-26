@@ -152,6 +152,16 @@ export const METERED_UNIT_RATES_USD = {
   storagePerGbMonth: 0.026,
   perPageView: 0.00039902751,
   perFormSubmission: 0.000061538462,
+  /**
+   * Aglyn Phone (AGL-4251): one call minute and one text segment, at Twilio's
+   * published US list prices read 2026-11-26. A minute is priced at the
+   * dearest leg it can take — an inbound minute forwarded to a cell is $0.0085
+   * in plus $0.014 out, and a voicemail minute adds $0.0025 of recording —
+   * rounded up to $0.025. A segment is $0.0083 plus the typical US carrier
+   * fee on a registered number (~$0.003), as the sms plugin meters it.
+   */
+  perPhoneMinute: 0.025,
+  perPhoneText: 0.0113,
 }
 
 /**
@@ -172,6 +182,8 @@ export const METERED_OVERAGE_COST_USD = {
   perPageView:
     METERED_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD,
   perFormSubmission: METERED_UNIT_RATES_USD.perFormSubmission,
+  perPhoneMinute: METERED_UNIT_RATES_USD.perPhoneMinute,
+  perPhoneText: METERED_UNIT_RATES_USD.perPhoneText,
 }
 
 /**
@@ -205,6 +217,9 @@ export const METERED_BILLED_RATES_USD = {
   perPageView: publishedMeteredPrice(METERED_OVERAGE_COST_USD.perPageView * 1000, 2) / 1000,
   perFormSubmission:
     publishedMeteredPrice(METERED_OVERAGE_COST_USD.perFormSubmission * 1000, 3) / 1000,
+  // Phone (AGL-4251): quoted per minute and per text, to the tenth of a cent.
+  perPhoneMinute: publishedMeteredPrice(METERED_OVERAGE_COST_USD.perPhoneMinute, 3),
+  perPhoneText: publishedMeteredPrice(METERED_OVERAGE_COST_USD.perPhoneText, 3),
 }
 
 /**

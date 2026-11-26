@@ -391,6 +391,8 @@ describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
     expect(billed.sort()).toEqual([
       'perFormSubmission',
       'perPageView',
+      'perPhoneMinute',
+      'perPhoneText',
       'storagePerGbMonth',
     ])
     for (const key of billed) {
@@ -503,7 +505,7 @@ describe('the metered bands plugins declare', () => {
     ).toThrow(/perNothing/)
   })
 
-  it("is the forms plugin's submissions today, billed per 1,000 once the Inbox is released", () => {
+  it("is the forms plugin's submissions, billed per 1,000 once the Inbox is released, and Phone's minutes and texts, per unit once Phone is", () => {
     expect(
       meteredBands().map((band) => ({
         pluginId: band.pluginId,
@@ -523,6 +525,18 @@ describe('the metered bands plugins declare', () => {
           withheldUntil: 'release_inbox',
         },
       },
+      {
+        pluginId: 'phone',
+        id: 'phoneMinutes',
+        hostCounter: 'phoneMinutes',
+        metered: { rate: 'perPhoneMinute', quotedPer: 1, noun: 'phone minutes', withheldUntil: 'release_phone' },
+      },
+      {
+        pluginId: 'phone',
+        id: 'phoneTexts',
+        hostCounter: 'phoneTexts',
+        metered: { rate: 'perPhoneText', quotedPer: 1, noun: 'phone texts', withheldUntil: 'release_phone' },
+      },
     ])
   })
 
@@ -530,7 +544,7 @@ describe('the metered bands plugins declare', () => {
     const read = jest.fn((counter: string) =>
       counter === 'formSubmissions' ? 42 : undefined,
     )
-    expect(hostMeterReadings(read)).toEqual({ formSubmissions: 42 })
+    expect(hostMeterReadings(read)).toEqual({ formSubmissions: 42, phoneMinutes: 0, phoneTexts: 0 })
     expect(read.mock.calls.map(([counter]) => counter)).toEqual(
       meteredBands().map((band) => band.hostCounter),
     )

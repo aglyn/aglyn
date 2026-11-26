@@ -167,6 +167,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-themes'),
   },
   {
+    id: 'business-phone',
+    apiPrefixes: ["phone"],
+    register: {"console":"registerPhoneConsole"},
+    contributes: {"console":{"shell":true,"orgRoutes":["/business-phone"]}},
+    load: () => import('@aglyn/plugins-phone'),
+  },
+  {
     id: 'shipping',
     apiPrefixes: ["shipping"],
     register: {"console":"registerShippingConsole"},

@@ -92,6 +92,16 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-11-26 — Phone is a $15 a month add-on on Starter and Pro, with 300 minutes and 300 texts included and use past them at cost + 30% (AGL-4251)
+
+Phone gives a workspace a business number (its own Twilio subaccount) with two-way texts, calls forwarded to the team's cells and voicemail. It is sold as one org-wide add-on, `seatAddons.phone` (0 or 1), at `PHONE_ADDON_MONTHLY_USD` = $15 ($180 a year), on Starter and Pro only (`planSellsPhone`). One unit switches on `features.phone` and adds 300 to `phoneMinutesPerMonth` and 300 to `phoneTextsPerMonth`, which no plan includes on its own. Minutes and texts past the pool are two new infrastructure meters billed at cost + 30% kept after card fees: `perPhoneMinute` $0.025 cost ($0.034 billed) and `perPhoneText` $0.0113 cost ($0.016 billed), withheld while `release_phone` is off for the workspace. Nothing is sold until the release flag is on for a workspace and `STRIPE_PRICE_PHONE` is set.
+
+- **Decided by:** the account owner, 2026-11-26, approving the feature plans for that day in the session chat (the price, the included pool shape and cost + 30% past it, a Twilio subaccount per workspace). The pool size (300 and 300) is the lane's pick inside that decision and is open to change.
+- **Scope:** pricing, packaging
+- **Evidence:** `PHONE_ADDON_MONTHLY_USD`, `planSellsPhone` and `ORG_COGS_UNIT_RATES_USD` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; `ADDON_KINDS` in `libs/aglyn/src/lib/app-utils/bundle-intent.ts`; `METERED_UNIT_RATES_USD` and `METERED_BILLED_RATES_USD` in `apps/console/utils/usage-metering.ts`; `libs/plugins/phone/src/lib/declarations.ts`, `usage-axes.ts` and `constants/usage.ts`; `tools/scripts/setup-stripe.mjs`; AGL-4251.
+
+---
+
 ## 2026-11-24 — The retired plans (Business, Scale, Advanced, Agency) are removed from the product (AGL-4245)
 
 Pricing v4 (2026-11-03, AGL-4126) stopped selling Business, Scale, Advanced and Agency but kept their entitlement and price rows so a workspace still stored on one resolved as before. None is: a read-only production check on 2026-11-24 found no workspace on a retired plan by stored plan, staff comp, pending upgrade or pending downgrade, no release flag targeting one, no active Stripe price for one, and the only two subscriptions ever on one already canceled. The 24 retired Stripe products were archived the same day. So the four plan ids are removed from the product outright: `OrgPlan` is `free`, `starter`, `pro` and `enterprise` (Custom), and every entitlement row, price row, label, support tier, plugin band, guard pin and Firestore rules list that existed only for them is deleted. There is no data migration. One read-time safety net remains, `normalizeStoredPlan`: a stored plan, a comp or a Stripe `metadata.plan` that still names a removed id reads as Pro, the plan every one of their features moved into, and anything else unknown keeps reading as Free; staff can no longer store or comp one. Nothing a current customer pays or receives changes.

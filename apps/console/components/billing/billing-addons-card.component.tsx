@@ -48,6 +48,8 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import useBranding from '../../hooks/use-branding'
+import useReleaseFlags from '../../hooks/use-release-flags'
+import type { ReleaseFlagKey } from '@aglyn/aglyn/app-utils/release-flags'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { finishPendingCharge } from '../../utils/finish-pending-charge'
@@ -66,6 +68,7 @@ export const ADDON_LABELS: Record<string, string> = {
   // Counted in blocks (AGL-4144): "3 Aglyn AI credit blocks".
   aiAddon: `${aiAddonName()} credit blocks`,
   siteCare: 'Site Care',
+  phone: 'Phone',
 }
 
 /**
@@ -77,6 +80,7 @@ export const ADDON_LABELS: Record<string, string> = {
 export const TOGGLE_ADDON_KINDS: ReadonlySet<string> = new Set([
   'eventCalendar',
   'siteCare',
+  'phone',
 ])
 
 /**
@@ -85,6 +89,17 @@ export const TOGGLE_ADDON_KINDS: ReadonlySet<string> = new Set([
  * likeliest misreading of "we make your changes" is "so my plan's limits no
  * longer apply" — a 26th page or a second site is still an upgrade.
  */
+/**
+ * The Phone row's sentence (AGL-4251). The pool figures are the phone
+ * plugin's (`PHONE_INCLUDED_MINUTES_PER_UNIT`, `PHONE_INCLUDED_TEXTS_PER_UNIT`),
+ * restated here as words because the billing card never loads a plugin;
+ * change both together.
+ */
+export const PHONE_ADDON_DESCRIPTION =
+  'A business number for your workspace: two-way texts with customers, calls ' +
+  'forwarded to your team, and voicemail written out as text. Includes 300 ' +
+  'minutes and 300 texts a month; more are billed at cost + 30%.'
+
 export const SITE_CARE_DESCRIPTION =
   'We make your site changes for you: hours, prices, photos, a staff ' +
   'member, a seasonal banner, a section on an existing page, up to about an ' +
@@ -180,6 +195,8 @@ interface AddonRow {
    * a number the customer is quoted elsewhere.
    */
   yearlyPrice?: boolean
+  /** Shown only where this release flag is on for the workspace (staff see it as a preview). */
+  releaseFlag?: ReleaseFlagKey
 }
 
 const addonRows = (
@@ -234,6 +251,14 @@ const addonRows = (
     toggle: true,
     yearlyPrice: true,
   },
+  {
+    // Aglyn Phone (AGL-4251): released per workspace, so the row is too.
+    kind: 'phone',
+    label: 'Phone',
+    description: PHONE_ADDON_DESCRIPTION,
+    toggle: true,
+    releaseFlag: 'release_phone',
+  },
 ]
 
 /** The row title's price suffix: " — $49/mo", " — $588/yr", " — $4/mo each". */
@@ -284,6 +309,11 @@ export default function BillingAddonsCardComponent({
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const { confirm } = useConfirmationContext()
+  const releaseFlags = useReleaseFlags()
+  // A released-per-workspace add-on's row (Phone, AGL-4251): the customer
+  // sees it once the flag is on for them; staff see it as a preview.
+  const releaseVisible = (key: ReleaseFlagKey) =>
+    releaseFlags.isStaff || releaseFlags.flags[key]?.released === true
   const [state, setState] = useState<AddonsState | null>(null)
   const [drafts, setDrafts] = useState<Record<string, number>>({})
   const [busy, setBusy] = useState(false)
@@ -627,7 +657,9 @@ export default function BillingAddonsCardComponent({
             'cannot be changed here. Contact support to adjust them.'}
         </Alert>
       ) : null}
-      {addonRows(branding.productName, plan).map((row) => {
+      {addonRows(branding.productName, plan)
+        .filter((row) => !row.releaseFlag || releaseVisible(row.releaseFlag))
+        .map((row) => {
         const entry = state.catalog[row.kind]
         const current = state.quantities[row.kind] ?? 0
         const draft = drafts[row.kind] ?? current

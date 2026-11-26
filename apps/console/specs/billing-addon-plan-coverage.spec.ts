@@ -95,6 +95,8 @@ PRICE_ENV['STRIPE_PRICE_EVENT_CALENDAR'] = 'price_event_calendar'
 PRICE_ENV['STRIPE_PRICE_EVENT_CALENDAR_YEARLY'] = 'price_event_calendar_yearly'
 PRICE_ENV['STRIPE_PRICE_SITE_CARE'] = 'price_site_care'
 PRICE_ENV['STRIPE_PRICE_SITE_CARE_YEARLY'] = 'price_site_care_yearly'
+PRICE_ENV['STRIPE_PRICE_PHONE'] = 'price_phone'
+PRICE_ENV['STRIPE_PRICE_PHONE_YEARLY'] = 'price_phone_yearly'
 PRICE_ENV['STRIPE_PRICE_METERED'] = 'price_metered_usage'
 PRICE_ENV['STRIPE_PRICE_METERED_YEARLY'] = 'price_metered_usage_yearly'
 
@@ -150,6 +152,7 @@ describe('PAID_PLANS covers every plan that is actually sold (AGL-1340)', () => 
         item('price_event_calendar', 1),
         item('price_ai_credits', 3),
         item('price_site_care', 1),
+        item('price_phone', 1),
       ]
       // The bug, precisely: every one of these was 0 before the fix, and the
       // webhook merged that onto the org doc as the truth.
@@ -162,6 +165,7 @@ describe('PAID_PLANS covers every plan that is actually sold (AGL-1340)', () => 
         eventCalendar: 1,
         aiAddon: 3,
         siteCare: 1,
+        phone: 1,
       })
     },
   )
@@ -240,6 +244,7 @@ describe('the base plan item is identified explicitly (AGL-1340)', () => {
       eventCalendar: 0,
       aiAddon: 0,
       siteCare: 0,
+      phone: 0,
     })
   })
 
@@ -407,7 +412,17 @@ describe('Site Care is sold on every paid plan and never on Free (AGL-3954)', ()
     expect(addonMaxForPlan('siteCare', 'enterprise')).toBe(0)
   })
 
-  it('is the last kind, so every list that mirrors ADDON_KINDS appends it', () => {
-    expect(ADDON_KINDS[ADDON_KINDS.length - 1]).toBe('siteCare')
+  it('sells Phone (AGL-4251) at $15 on Starter and Pro only, one per workspace', () => {
+    expect(addonPriceId('phone', 'starter', 'month')).toBe('price_phone')
+    expect(addonKindFromPriceId('price_phone_yearly')).toBe('phone')
+    expect(addonUnitUsd('phone', 'starter')).toBe(15)
+    expect(addonMaxForPlan('phone', 'pro')).toBe(1)
+    expect(addonMaxForPlan('phone', 'free')).toBe(0)
+    expect(addonMaxForPlan('phone', 'enterprise')).toBe(0)
+    expect(addonUnitUsd('phone', 'enterprise')).toBeNull()
+  })
+
+  it('comes before Phone (AGL-4251), the last kind, so every list that mirrors ADDON_KINDS appends them in order', () => {
+    expect(ADDON_KINDS.slice(-2)).toEqual(['siteCare', 'phone'])
   })
 })

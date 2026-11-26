@@ -236,6 +236,12 @@
       "@aglyn/plugins-outreach/*": [
         "../../libs/plugins/outreach/src/lib/*"
       ],
+      "@aglyn/plugins-phone": [
+        "../../libs/plugins/phone/src/index.ts"
+      ],
+      "@aglyn/plugins-phone/*": [
+        "../../libs/plugins/phone/src/lib/*"
+      ],
       "@aglyn/plugins-data": [
         "../../libs/plugins/data/src/index.ts"
       ],

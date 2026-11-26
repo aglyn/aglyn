@@ -14,6 +14,7 @@ export const PLUGIN_SURFACE_TITLES: Readonly<Record<string, string>> = {
   'ai-jobs': 'AI jobs',
   automation: 'Automation',
   bookings: 'Bookings',
+  'business-phone': 'Phone',
   crm: 'CRM',
   data: 'Data',
   domains: 'Domains',

@@ -69,6 +69,8 @@ const FLAT_ENV_NAME: Partial<Record<AddonKind, string>> = {
   posRegisters: 'POS_REGISTER',
   eventCalendar: 'EVENT_CALENDAR',
   siteCare: 'SITE_CARE',
+  // Aglyn Phone (AGL-4251): `STRIPE_PRICE_PHONE[_YEARLY]`.
+  phone: 'PHONE',
   // Credits by the block (AGL-4144): `STRIPE_PRICE_AI_CREDITS[_YEARLY]`.
   aiAddon: AI_CREDIT_BLOCK_ENV_KEY,
 }

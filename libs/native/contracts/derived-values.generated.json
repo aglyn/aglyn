@@ -2721,6 +2721,11 @@
       "rolloutPercent": 0,
       "plans": []
     },
+    "release_phone": {
+      "enabled": false,
+      "rolloutPercent": 0,
+      "plans": []
+    },
     "release_addon_store": {
       "enabled": true,
       "rolloutPercent": 0,
@@ -5813,11 +5818,13 @@
       "posRegisters",
       "eventCalendar",
       "aiAddon",
-      "siteCare"
+      "siteCare",
+      "phone"
     ],
     "toggles": [
       "eventCalendar",
-      "siteCare"
+      "siteCare",
+      "phone"
     ],
     "tokens": {
       "managers": "managers",
@@ -5854,7 +5861,10 @@
       "sitecare": "siteCare",
       "site-care": "siteCare",
       "site_care": "siteCare",
-      "care": "siteCare"
+      "care": "siteCare",
+      "phone": "phone",
+      "phoneline": "phone",
+      "businessnumber": "phone"
     },
     "labels": {
       "managers": "Extra manager seat",
@@ -5864,7 +5874,8 @@
       "posRegisters": "POS register",
       "eventCalendar": "Event Calendar",
       "aiAddon": "Aglyn AI credit block",
-      "siteCare": "Site Care"
+      "siteCare": "Site Care",
+      "phone": "Phone"
     },
     "aiTierNames": {},
     "planLabels": {
@@ -5882,7 +5893,8 @@
         "posRegisters": 0,
         "eventCalendar": 1,
         "aiAddon": 0,
-        "siteCare": 0
+        "siteCare": 0,
+        "phone": 0
       },
       "starter": {
         "managers": 3,
@@ -5892,7 +5904,8 @@
         "posRegisters": 0,
         "eventCalendar": 1,
         "aiAddon": 30,
-        "siteCare": 1
+        "siteCare": 1,
+        "phone": 1
       },
       "pro": {
         "managers": 100,
@@ -5902,7 +5915,8 @@
         "posRegisters": 50,
         "eventCalendar": 1,
         "aiAddon": 30,
-        "siteCare": 1
+        "siteCare": 1,
+        "phone": 1
       },
       "enterprise": {
         "managers": 0,
@@ -5912,7 +5926,8 @@
         "posRegisters": 50,
         "eventCalendar": 1,
         "aiAddon": 0,
-        "siteCare": 0
+        "siteCare": 0,
+        "phone": 0
       }
     }
   },

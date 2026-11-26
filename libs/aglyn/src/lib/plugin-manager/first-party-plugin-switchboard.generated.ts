@@ -222,6 +222,11 @@ export const FIRST_PARTY_PLUGIN_SWITCHES: readonly FirstPartyPluginSwitch[] = [
     "alwaysOnForWorkspace": true
   },
   {
+    "id": "business-phone",
+    "label": "Phone",
+    "releaseFlag": "release_phone"
+  },
+  {
     "id": "ad-conversions",
     "label": "Ad conversions",
     "alwaysOnForWorkspace": true
@@ -274,6 +279,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "music": "elements",
   "help-desks": "console-only",
   "waivers": "elements",
+  "business-phone": "console-only",
   "ad-conversions": "console-only",
   "domains": "console-only",
 }

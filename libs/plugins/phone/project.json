@@ -1,0 +1,29 @@
+{
+  "name": "plugins-phone",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/plugins/phone/src",
+  "projectType": "library",
+  "tags": ["aglyn:addons", "scope:plugin", "type:feature"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/plugins/phone",
+        "main": "libs/plugins/phone/src/index.ts",
+        "tsConfig": "libs/plugins/phone/tsconfig.lib.json",
+        "assets": ["libs/plugins/phone/*.md"]
+      }
+    },
+    "test": {
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/jest.preset.js",
+        {
+          "externalDependencies": ["jest", "@nx/jest", "ts-jest", "@swc/jest"]
+        }
+      ]
+    }
+  }
+}

@@ -46,6 +46,8 @@ import {
   aiAddonName,
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
   EXTRA_HOSTS_ADDON_MAX,
+  PHONE_ADDON_MONTHLY_USD,
+  planSellsPhone,
   PLAN_LABELS,
   PLAN_PRICING,
   planSellsAiCredits,
@@ -74,6 +76,7 @@ export const ADDON_KINDS: readonly AddonKind[] = [
   'eventCalendar',
   'aiAddon',
   'siteCare',
+  'phone',
 ]
 
 /**
@@ -83,6 +86,7 @@ export const ADDON_KINDS: readonly AddonKind[] = [
 export const TOGGLE_ADDON_KIND_LIST: readonly AddonKind[] = [
   'eventCalendar',
   'siteCare',
+  'phone',
 ]
 
 export function isAddonKind(value: unknown): value is AddonKind {
@@ -118,6 +122,8 @@ export function addonUnitUsd(
       return planSellsAiCredits(plan) ? AI_CREDIT_BLOCK_MONTHLY_USD : null
     case 'siteCare':
       return SITE_CARE_ADDON_MONTHLY_USD
+    case 'phone':
+      return planSellsPhone(plan) ? PHONE_ADDON_MONTHLY_USD : null
   }
 }
 
@@ -163,6 +169,9 @@ export function addonMaxForBaseline(
       // does for Aglyn AI. This ceiling is the rule that keeps Free (no
       // subscription) and Enterprise (quoted per deal) from buying it.
       return planSellsSiteCare(plan) ? 1 : 0
+    case 'phone':
+      // One number per workspace today (AGL-4251), Starter and Pro only.
+      return planSellsPhone(plan) ? 1 : 0
   }
 }
 
@@ -209,6 +218,7 @@ export const BUNDLE_ADDON_TOKENS: Record<AddonKind, string> = {
   eventCalendar: 'eventCalendar',
   aiAddon: 'ai',
   siteCare: 'siteCare',
+  phone: 'phone',
 }
 
 /**
@@ -231,6 +241,7 @@ export const TOKEN_KINDS: Readonly<Record<string, AddonKind>> = (() => {
   add('eventCalendar', 'events', 'calendar')
   add('aiAddon', 'aglynAi', 'aiCredits', 'aiBlocks')
   add('siteCare', 'site-care', 'site_care', 'care')
+  add('phone', 'phoneLine', 'businessNumber')
   return map
 })()
 
@@ -418,6 +429,8 @@ export function bundleAddonLabel(kind: AddonKind, brand?: string): string {
       return `${aiAddonName(brand)} credit block`
     case 'siteCare':
       return 'Site Care'
+    case 'phone':
+      return 'Phone'
   }
 }
 

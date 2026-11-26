@@ -341,6 +341,8 @@ const PLUGIN_TOPICS = {
   // The waivers plugin's Waivers page: its waivers, its signatures and the
   // waiver editor (AGL-4042).
   waivers: '/commerce-and-bookings/commerce/waivers',
+  // The phone plugin's Phone page (AGL-4251).
+  phone: '/content-and-data/crm/phone',
 }
 
 // The PLUGIN_TOPICS keys allowed to name an `unlisted: true` page. Such a page

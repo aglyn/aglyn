@@ -101,6 +101,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-fonts/server'),
   },
   {
+    id: 'business-phone',
+    apiPrefixes: ["phone"],
+    register: {"consoleApi":"registerPhoneConsoleApi"},
+    load: () => import('@aglyn/plugins-phone/server'),
+  },
+  {
     id: 'sms',
     apiPrefixes: ["sms"],
     register: {"consoleApi":"registerSmsConsoleApi"},

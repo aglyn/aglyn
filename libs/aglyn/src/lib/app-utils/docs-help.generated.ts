@@ -462,6 +462,11 @@ export const PLUGIN_DOCS = {
     title: 'Ship with your own Easyship, Sendcloud or ShipperHQ',
     excerpt: 'Connect your own Easyship or Sendcloud account to get rates and buy labels there, billed to you by that service, or ShipperHQ to price checkout shipping with your own rules. Rolling out.',
   },
+  phone: {
+    path: '/content-and-data/crm/phone',
+    title: 'Phone',
+    excerpt: 'A business number for your workspace. Text customers, take calls on your team\'s cell phones, and read voicemail as text. Rolling out.',
+  },
   pickupAndDelivery: {
     path: '/commerce-and-bookings/commerce/pickup-and-local-delivery',
     title: 'Pickup & local delivery',
@@ -678,6 +683,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   ordersAndReturns: ['#fulfillment', '#invoices', '#send-invoice', '#invoice-pay-link', '#invoice-which-orders', '#returns', '#buyer-requests', '#run-a-return', '#order-webhooks', '#when-an-endpoint-is-down', '#related'],
   orgAutomations: ['#what-an-org-automation-is', '#create-one', '#triggers', '#steps', '#pause-it-on-one-site', '#waiting-switching-off-and-deleting', '#every-sites-own-automations', '#related'],
   ownShippingAccounts: ['#before-you-start', '#connect-an-account', '#easyship', '#sendcloud', '#shipperhq', '#tracking-webhooks', '#what-changes', '#disconnect', '#troubleshooting', '#related'],
+  phone: ['#what-it-costs', '#choose-your-number', '#keep-a-number-you-already-have', '#register-your-number-for-texting', '#texts', '#calls', '#call-a-customer-from-your-business-number', '#settings', '#recording'],
   pickupAndDelivery: ['#set-up-pickup', '#set-up-local-delivery', '#queue', '#ask-aglyn-ai', '#related'],
   plugins: ['#install--upgrade', '#browse-card', '#whats-included', '#what-the-badges-on-a-listing-mean', '#how-plugins-run', '#when-one-plugin-depends-on-another', '#a-dependency-that-is-off-for-one-site', '#configure', '#configure-site', '#publish-your-own', '#related'],
   pos: ['#registers', '#who-can-do-what-at-the-register', '#the-register', '#modifiers', '#selling-past-the-count', '#taking-payment', '#platform-fees-at-the-register', '#when-something-disconnects', '#tips', '#receipts', '#card-readers', '#customer-display', '#self-service-kiosk', '#reservations', '#several-identical-units', '#related'],

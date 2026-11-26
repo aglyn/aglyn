@@ -43,7 +43,9 @@
         "marketplaceFeePct": 30,
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
-        "assistCreditsPerMonth": 300
+        "assistCreditsPerMonth": 300,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -109,7 +111,9 @@
         "marketplaceFeePct": 30,
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
-        "assistCreditsPerMonth": 300
+        "assistCreditsPerMonth": 300,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -180,7 +184,9 @@
         "marketplaceFeePct": 30,
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
-        "assistCreditsPerMonth": 300
+        "assistCreditsPerMonth": 300,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -246,7 +252,9 @@
         "marketplaceFeePct": 30,
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
-        "assistCreditsPerMonth": 300
+        "assistCreditsPerMonth": 300,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -307,7 +315,9 @@
         "marketplaceFeePct": 30,
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
-        "assistCreditsPerMonth": 300
+        "assistCreditsPerMonth": 300,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -373,7 +383,9 @@
         "marketplaceFeePct": 30,
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
-        "assistCreditsPerMonth": 300
+        "assistCreditsPerMonth": 300,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -439,7 +451,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
-        "assistCreditsPerMonth": 750
+        "assistCreditsPerMonth": 750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -505,7 +519,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
-        "assistCreditsPerMonth": 750
+        "assistCreditsPerMonth": 750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -576,7 +592,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
-        "assistCreditsPerMonth": 750
+        "assistCreditsPerMonth": 750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -642,7 +660,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
-        "assistCreditsPerMonth": 750
+        "assistCreditsPerMonth": 750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -703,7 +723,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
-        "assistCreditsPerMonth": 750
+        "assistCreditsPerMonth": 750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -769,7 +791,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
-        "assistCreditsPerMonth": 750
+        "assistCreditsPerMonth": 750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -835,7 +859,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
-        "assistCreditsPerMonth": 2750
+        "assistCreditsPerMonth": 2750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -901,7 +927,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
-        "assistCreditsPerMonth": 2750
+        "assistCreditsPerMonth": 2750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -972,7 +1000,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
-        "assistCreditsPerMonth": 2750
+        "assistCreditsPerMonth": 2750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -1038,7 +1068,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
-        "assistCreditsPerMonth": 2750
+        "assistCreditsPerMonth": 2750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -1099,7 +1131,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
-        "assistCreditsPerMonth": 2750
+        "assistCreditsPerMonth": 2750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -1165,7 +1199,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
-        "assistCreditsPerMonth": 2750
+        "assistCreditsPerMonth": 2750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -1231,7 +1267,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
-        "assistCreditsPerMonth": 116000
+        "assistCreditsPerMonth": 116000,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -1297,7 +1335,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
-        "assistCreditsPerMonth": 116000
+        "assistCreditsPerMonth": 116000,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -1368,7 +1408,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
-        "assistCreditsPerMonth": 116000
+        "assistCreditsPerMonth": 116000,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -1434,7 +1476,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
-        "assistCreditsPerMonth": 116000
+        "assistCreditsPerMonth": 116000,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -1495,7 +1539,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
-        "assistCreditsPerMonth": 116000
+        "assistCreditsPerMonth": 116000,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -1561,7 +1607,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
-        "assistCreditsPerMonth": 116000
+        "assistCreditsPerMonth": 116000,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "sites": [
         {
@@ -1628,7 +1676,9 @@
         "marketplaceFeePct": 30,
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
-        "assistCreditsPerMonth": 300
+        "assistCreditsPerMonth": 300,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "records": {
         "total": 100,
@@ -1694,7 +1744,9 @@
         "marketplaceFeePct": 30,
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
-        "assistCreditsPerMonth": 300
+        "assistCreditsPerMonth": 300,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "records": {
         "total": 101,
@@ -1760,7 +1812,9 @@
         "marketplaceFeePct": 30,
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
-        "assistCreditsPerMonth": 300
+        "assistCreditsPerMonth": 300,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "records": {
         "total": 1334,
@@ -1826,7 +1880,9 @@
         "marketplaceFeePct": 30,
         "crmEmailsPerDay": 0,
         "workflowRunsPerMonth": 0,
-        "assistCreditsPerMonth": 300
+        "assistCreditsPerMonth": 300,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "records": {
         "total": 56889,
@@ -1892,7 +1948,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
-        "assistCreditsPerMonth": 750
+        "assistCreditsPerMonth": 750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "records": {
         "total": 1000,
@@ -1958,7 +2016,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
-        "assistCreditsPerMonth": 750
+        "assistCreditsPerMonth": 750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "records": {
         "total": 1001,
@@ -2024,7 +2084,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
-        "assistCreditsPerMonth": 750
+        "assistCreditsPerMonth": 750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "records": {
         "total": 2234,
@@ -2090,7 +2152,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 35,
         "workflowRunsPerMonth": 500,
-        "assistCreditsPerMonth": 750
+        "assistCreditsPerMonth": 750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "records": {
         "total": 57789,
@@ -2156,7 +2220,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
-        "assistCreditsPerMonth": 2750
+        "assistCreditsPerMonth": 2750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "records": {
         "total": 10000,
@@ -2222,7 +2288,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
-        "assistCreditsPerMonth": 2750
+        "assistCreditsPerMonth": 2750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "records": {
         "total": 10001,
@@ -2288,7 +2356,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
-        "assistCreditsPerMonth": 2750
+        "assistCreditsPerMonth": 2750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "records": {
         "total": 11234,
@@ -2354,7 +2424,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 150,
         "workflowRunsPerMonth": 5000,
-        "assistCreditsPerMonth": 2750
+        "assistCreditsPerMonth": 2750,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "records": {
         "total": 66789,
@@ -2420,7 +2492,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
-        "assistCreditsPerMonth": 116000
+        "assistCreditsPerMonth": 116000,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "records": {
         "total": 1000000,
@@ -2486,7 +2560,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
-        "assistCreditsPerMonth": 116000
+        "assistCreditsPerMonth": 116000,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "records": {
         "total": 1000001,
@@ -2552,7 +2628,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
-        "assistCreditsPerMonth": 116000
+        "assistCreditsPerMonth": 116000,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "records": {
         "total": 1001234,
@@ -2618,7 +2696,9 @@
         "marketplaceFeePct": 20,
         "crmEmailsPerDay": 2000,
         "workflowRunsPerMonth": 4000000,
-        "assistCreditsPerMonth": 116000
+        "assistCreditsPerMonth": 116000,
+        "phoneMinutesPerMonth": 0,
+        "phoneTextsPerMonth": 0
       },
       "records": {
         "total": 1056789,

@@ -22937,6 +22937,20 @@
               "help": "Empty inherits the plan default. 0 is a real limit of none."
             },
             {
+              "key": "quota.phoneMinutesPerMonth",
+              "label": "Limit: Phone min / mo",
+              "kind": "number",
+              "initial": "{item.entitlements.phoneMinutesPerMonth}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.phoneTextsPerMonth",
+              "label": "Limit: Phone texts / mo",
+              "kind": "number",
+              "initial": "{item.entitlements.phoneTextsPerMonth}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
               "key": "quota.transactionalEmailsPerDay",
               "label": "Limit: Transactional emails / day (abuse ceiling)",
               "kind": "number",
@@ -23744,6 +23758,26 @@
               ]
             },
             {
+              "key": "feature.phone",
+              "label": "Feature: Phone",
+              "kind": "select",
+              "initial": "{item.entitlements.features.phone}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
               "key": "release.release_member_accounts",
               "label": "Early access: User Accounts",
               "kind": "select",
@@ -24094,6 +24128,28 @@
                 }
               ],
               "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_phone",
+              "label": "Early access: Phone",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_phone}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: yes."
             },
             {
               "key": "release.release_addon_store",
